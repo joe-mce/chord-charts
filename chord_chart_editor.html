@@ -1,0 +1,408 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Chord Chart Editor</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg: #0e0e0f;
+    --bg2: #1a1a1c;
+    --bg3: #242426;
+    --border: #2e2e32;
+    --border2: #3e3e44;
+    --text: #e8e8ea;
+    --text2: #888890;
+    --text3: #555560;
+    --accent: #7c6af7;
+    --danger: #e05555;
+    --mono: 'Courier New', Courier, monospace;
+    --sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    --radius: 6px;
+  }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--sans);
+    font-size: 14px;
+    min-height: 100vh;
+    padding: 16px;
+  }
+
+  h1 {
+    font-family: var(--mono);
+    font-size: 13px;
+    color: var(--text3);
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    margin-bottom: 16px;
+    font-weight: 400;
+  }
+
+  .meta-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 6px;
+    margin-bottom: 6px;
+  }
+  .meta-grid input {
+    background: var(--bg2);
+    border: 0.5px solid var(--border);
+    border-radius: var(--radius);
+    padding: 8px 10px;
+    font-size: 13px;
+    color: var(--text);
+    font-family: var(--mono);
+    width: 100%;
+    outline: none;
+  }
+  .meta-grid input:focus { border-color: var(--border2); }
+  .meta-grid input::placeholder { color: var(--text3); }
+
+  .lines-area {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    margin-bottom: 8px;
+  }
+
+  .line-row {
+    display: flex;
+    align-items: center;
+    gap: 0;
+    overflow-x: auto;
+    overflow-y: visible;
+    scrollbar-width: none;
+    position: relative;
+  }
+  .line-row::-webkit-scrollbar { display: none; }
+
+  .bar-input {
+    width: 72px;
+    min-width: 72px;
+    flex-shrink: 0;
+    background: var(--bg2);
+    border: 0.5px solid var(--border);
+    border-right: none;
+    padding: 7px 6px;
+    font-size: 13px;
+    color: var(--text);
+    font-family: var(--mono);
+    text-align: center;
+    outline: none;
+    height: 34px;
+  }
+  .bar-input:first-child { border-radius: var(--radius) 0 0 var(--radius); }
+  .bar-input:focus { border-color: var(--border2); background: var(--bg3); z-index: 1; position: relative; }
+
+  .bar-sep {
+    width: 1px;
+    min-width: 1px;
+    height: 34px;
+    background: var(--border);
+    flex-shrink: 0;
+  }
+
+  .line-options-btn {
+    flex-shrink: 0;
+    background: var(--bg2);
+    border: 0.5px solid var(--border);
+    border-left: none;
+    border-radius: 0 var(--radius) var(--radius) 0;
+    padding: 0 10px;
+    height: 34px;
+    cursor: pointer;
+    color: var(--text3);
+    font-size: 15px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    outline: none;
+    transition: color 0.1s;
+  }
+  .line-options-btn:hover { color: var(--text); background: var(--bg3); }
+
+  .add-line-btn {
+    background: none;
+    border: 0.5px dashed var(--border);
+    border-radius: var(--radius);
+    color: var(--text3);
+    padding: 7px 16px;
+    font-size: 12px;
+    cursor: pointer;
+    width: 100%;
+    font-family: var(--sans);
+    letter-spacing: 0.05em;
+    transition: color 0.1s, border-color 0.1s;
+  }
+  .add-line-btn:hover { color: var(--text2); border-color: var(--border2); }
+
+  .output-section { margin-top: 16px; }
+
+  .output-label {
+    font-size: 11px;
+    color: var(--text3);
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    font-family: var(--mono);
+    margin-bottom: 6px;
+  }
+
+  .output-wrap {
+    position: relative;
+    background: var(--bg2);
+    border: 0.5px solid var(--border);
+    border-radius: var(--radius);
+    padding: 14px 42px 14px 14px;
+  }
+
+  .output-pre {
+    font-family: var(--mono);
+    font-size: 13px;
+    color: var(--text);
+    white-space: pre;
+    line-height: 1.75;
+    overflow-x: auto;
+    scrollbar-width: thin;
+    scrollbar-color: var(--border) transparent;
+  }
+
+  .copy-btn {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    background: none;
+    border: 0.5px solid var(--border);
+    border-radius: var(--radius);
+    padding: 5px 7px;
+    cursor: pointer;
+    color: var(--text3);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: color 0.1s;
+  }
+  .copy-btn:hover { color: var(--text); border-color: var(--border2); }
+  .copy-btn.copied { color: #5dbf7a; border-color: #5dbf7a44; }
+
+  .menu-overlay {
+    position: fixed;
+    z-index: 200;
+    background: var(--bg3);
+    border: 0.5px solid var(--border2);
+    border-radius: var(--radius);
+    min-width: 200px;
+    overflow: hidden;
+  }
+  .menu-overlay button {
+    display: block;
+    width: 100%;
+    text-align: left;
+    background: none;
+    border: none;
+    padding: 10px 14px;
+    font-size: 13px;
+    color: var(--text);
+    cursor: pointer;
+    font-family: var(--sans);
+    transition: background 0.1s;
+  }
+  .menu-overlay button:hover { background: var(--bg2); }
+  .menu-overlay button.danger { color: var(--danger); }
+  .menu-divider { height: 0.5px; background: var(--border); margin: 2px 0; }
+</style>
+</head>
+<body>
+
+<h1>Chord Chart Editor</h1>
+
+<div class="meta-grid">
+  <input id="m-title" placeholder="Title" />
+  <input id="m-composer" placeholder="Composer" />
+  <input id="m-feel" placeholder="Feel" />
+  <input id="m-key" placeholder="Key" />
+</div>
+
+<div class="lines-area" id="lines-area"></div>
+<button class="add-line-btn" onclick="addLine()">+ add line</button>
+
+<div class="output-section">
+  <div class="output-label">Output</div>
+  <div class="output-wrap">
+    <pre class="output-pre" id="output"></pre>
+    <button class="copy-btn" id="copy-btn" onclick="copyOutput()" title="Copy to clipboard">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <rect x="9" y="9" width="13" height="13" rx="2"/>
+        <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
+      </svg>
+    </button>
+  </div>
+</div>
+
+<div id="menu-portal"></div>
+
+<script>
+let lines = [['','','',''],['','','',''],['','','',''],['','','','']];
+let menuState = null;
+let outputTimer = null;
+
+const CONVERSIONS = [
+  ['maj7','Δ7'],
+  ['m7','m7'],
+  ['h7','ø7'],
+  ['ø7','ø7'],
+  ['dim7','o'],
+];
+
+function convertSymbols(s) {
+  let r = s;
+  CONVERSIONS.forEach(([f,t]) => { r = r.split(f).join(t); });
+  return r;
+}
+
+function padBar(raw) {
+  const s = convertSymbols(raw.trim());
+  if (!s) return '   %    ';
+  if (s === '%') return '   %    ';
+  if (s.length <= 8) return s.padEnd(8);
+  return s;
+}
+
+function buildOutput() {
+  const title = document.getElementById('m-title').value.trim();
+  const composer = document.getElementById('m-composer').value.trim();
+  const feel = document.getElementById('m-feel').value.trim();
+  const key = document.getElementById('m-key').value.trim();
+
+  let out = '';
+  const titleLine = [title, composer ? '(' + composer + ')' : ''].filter(Boolean).join(' ');
+  const feelLine = [feel, key].filter(Boolean).join(', ');
+  if (titleLine) out += titleLine + '\n';
+  if (feelLine) out += feelLine + '\n';
+
+  lines.forEach(bars => {
+    out += bars.map(b => padBar(b) + '|').join('') + '\n';
+  });
+
+  document.getElementById('output').textContent = out.trimEnd();
+}
+
+function scheduleOutput() {
+  clearTimeout(outputTimer);
+  outputTimer = setTimeout(buildOutput, 280);
+}
+
+function render() {
+  const area = document.getElementById('lines-area');
+  area.innerHTML = '';
+
+  lines.forEach((bars, li) => {
+    const row = document.createElement('div');
+    row.className = 'line-row';
+
+    bars.forEach((val, bi) => {
+      const inp = document.createElement('input');
+      inp.className = 'bar-input';
+      inp.value = val;
+      inp.addEventListener('input', e => {
+        lines[li][bi] = e.target.value;
+        scheduleOutput();
+      });
+
+      if (bi === 0) {
+        inp.style.borderRadius = '6px 0 0 6px';
+      }
+
+      const sep = document.createElement('div');
+      sep.className = 'bar-sep';
+
+      row.appendChild(inp);
+      row.appendChild(sep);
+    });
+
+    const optBtn = document.createElement('button');
+    optBtn.className = 'line-options-btn';
+    optBtn.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="5" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="12" cy="19" r="1"/></svg>`;
+    optBtn.addEventListener('click', e => { e.stopPropagation(); showLineMenu(e, li); });
+    row.appendChild(optBtn);
+
+    area.appendChild(row);
+  });
+
+  buildOutput();
+}
+
+function showLineMenu(e, li) {
+  closeMenu();
+  const rect = e.target.getBoundingClientRect();
+  const m = document.createElement('div');
+  m.className = 'menu-overlay';
+
+  const menuX = Math.min(rect.left, window.innerWidth - 210);
+  m.style.top = (rect.bottom + 4) + 'px';
+  m.style.left = menuX + 'px';
+
+  const actions = [
+    ['Add bar', () => { lines[li].push(''); render(); }],
+    ['Remove empty bars', () => {
+      const filtered = lines[li].filter(b => b.trim() !== '' && b.trim() !== '%');
+      lines[li] = filtered.length > 0 ? filtered : [''];
+      render();
+    }],
+    ['—'],
+    ['Add line above', () => { lines.splice(li, 0, ['','','','']); render(); }],
+    ['Add line below', () => { lines.splice(li + 1, 0, ['','','','']); render(); }],
+    ['—'],
+    ['Delete line', () => { if (lines.length > 1) { lines.splice(li, 1); render(); } }, 'danger'],
+  ];
+
+  actions.forEach(([label, fn, cls]) => {
+    if (label === '—') {
+      const d = document.createElement('div');
+      d.className = 'menu-divider';
+      m.appendChild(d);
+      return;
+    }
+    const btn = document.createElement('button');
+    btn.textContent = label;
+    if (cls) btn.className = cls;
+    btn.addEventListener('click', () => { closeMenu(); fn(); });
+    m.appendChild(btn);
+  });
+
+  m.style.pointerEvents = 'all';
+  document.getElementById('menu-portal').appendChild(m);
+  menuState = m;
+}
+
+function closeMenu() {
+  if (menuState) { menuState.remove(); menuState = null; }
+}
+
+document.addEventListener('click', closeMenu);
+
+function addLine() {
+  lines.push(['','','','']);
+  render();
+}
+
+function copyOutput() {
+  const text = document.getElementById('output').textContent;
+  navigator.clipboard.writeText(text).then(() => {
+    const btn = document.getElementById('copy-btn');
+    btn.classList.add('copied');
+    setTimeout(() => btn.classList.remove('copied'), 1400);
+  }).catch(() => {});
+}
+
+['m-title','m-composer','m-feel','m-key'].forEach(id => {
+  document.getElementById(id).addEventListener('input', scheduleOutput);
+});
+
+render();
+</script>
+</body>
+</html>
