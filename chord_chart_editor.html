@@ -457,7 +457,7 @@ function render() {
       inp.value = val;
       inp.setAttribute('autocomplete', 'off');
       inp.setAttribute('autocorrect', 'off');
-      inp.setAttribute('autocapitalize', 'none');
+      inp.setAttribute('autocapitalize', 'words');
       inp.setAttribute('spellcheck', 'false');
       inp.addEventListener('input', e => {
         lines[li][bi] = e.target.value;
@@ -475,6 +475,7 @@ function render() {
     const optBtn = document.createElement('button');
     optBtn.className = 'line-options-btn';
     optBtn.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="5" r="1.5" fill="currentColor"/><circle cx="12" cy="12" r="1.5" fill="currentColor"/><circle cx="12" cy="19" r="1.5" fill="currentColor"/></svg>`;
+    optBtn.setAttribute('tabindex', '-1');
     optBtn.addEventListener('click', e => { e.stopPropagation(); showLineMenu(e, li); });
 
     // Outer border wrapper for the bars + left edge
