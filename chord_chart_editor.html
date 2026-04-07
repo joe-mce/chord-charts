@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>Chord Chart Editor</title>
 <style>
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -16,7 +16,6 @@
     --text: #e8e8ea;
     --text2: #888890;
     --text3: #555560;
-    --accent: #7c6af7;
     --danger: #e05555;
     --mono: 'Courier New', Courier, monospace;
     --sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
@@ -27,33 +26,33 @@
     background: var(--bg);
     color: var(--text);
     font-family: var(--sans);
-    font-size: 14px;
+    font-size: 16px;
     min-height: 100vh;
-    padding: 16px;
+    padding: 14px;
   }
 
   h1 {
     font-family: var(--mono);
-    font-size: 13px;
+    font-size: 11px;
     color: var(--text3);
-    letter-spacing: 0.12em;
+    letter-spacing: 0.14em;
     text-transform: uppercase;
-    margin-bottom: 16px;
+    margin-bottom: 14px;
     font-weight: 400;
   }
 
   .meta-grid {
     display: grid;
     grid-template-columns: 1fr 1fr;
-    gap: 6px;
-    margin-bottom: 6px;
+    gap: 5px;
+    margin-bottom: 10px;
   }
   .meta-grid input {
     background: var(--bg2);
     border: 0.5px solid var(--border);
     border-radius: var(--radius);
-    padding: 8px 10px;
-    font-size: 13px;
+    padding: 9px 10px;
+    font-size: 16px;
     color: var(--text);
     font-family: var(--mono);
     width: 100%;
@@ -65,45 +64,74 @@
   .lines-area {
     display: flex;
     flex-direction: column;
-    gap: 2px;
+    gap: 3px;
     margin-bottom: 8px;
   }
 
   .line-row {
     display: flex;
-    align-items: center;
-    gap: 0;
-    overflow-x: auto;
-    overflow-y: visible;
-    scrollbar-width: none;
+    align-items: stretch;
+    width: 100%;
+    min-width: 0;
+  }
+
+  .bars-container {
+    display: flex;
+    align-items: stretch;
+    flex: 1;
+    min-width: 0;
+  }
+
+  .bar-wrap {
+    display: flex;
+    align-items: stretch;
+    flex: 1;
+    min-width: 36px;
     position: relative;
   }
-  .line-row::-webkit-scrollbar { display: none; }
-
-  .bar-input {
-    width: 72px;
-    min-width: 72px;
-    flex-shrink: 0;
-    background: var(--bg2);
-    border: 0.5px solid var(--border);
-    border-right: none;
-    padding: 7px 6px;
-    font-size: 13px;
-    color: var(--text);
-    font-family: var(--mono);
-    text-align: center;
-    outline: none;
-    height: 34px;
-  }
-  .bar-input:first-child { border-radius: var(--radius) 0 0 var(--radius); }
-  .bar-input:focus { border-color: var(--border2); background: var(--bg3); z-index: 1; position: relative; }
 
   .bar-sep {
     width: 1px;
     min-width: 1px;
-    height: 34px;
     background: var(--border);
     flex-shrink: 0;
+    align-self: stretch;
+  }
+
+  .bar-input {
+    flex: 1;
+    min-width: 0;
+    width: 100%;
+    background: var(--bg2);
+    border-top: 0.5px solid var(--border);
+    border-bottom: 0.5px solid var(--border);
+    border-left: none;
+    border-right: none;
+    padding: 8px 3px;
+    font-size: 16px;
+    color: var(--text);
+    font-family: var(--mono);
+    text-align: center;
+    outline: none;
+    height: 38px;
+    border-radius: 0;
+    -webkit-appearance: none;
+  }
+  .bar-input:focus {
+    background: var(--bg3);
+    border-top-color: var(--border2);
+    border-bottom-color: var(--border2);
+    z-index: 1;
+    position: relative;
+  }
+
+  .line-start-border {
+    width: 1px;
+    min-width: 1px;
+    background: var(--border);
+    flex-shrink: 0;
+    align-self: stretch;
+    border-radius: var(--radius) 0 0 var(--radius);
   }
 
   .line-options-btn {
@@ -113,30 +141,44 @@
     border-left: none;
     border-radius: 0 var(--radius) var(--radius) 0;
     padding: 0 10px;
-    height: 34px;
+    height: 38px;
     cursor: pointer;
     color: var(--text3);
-    font-size: 15px;
     display: flex;
     align-items: center;
     justify-content: center;
     outline: none;
     transition: color 0.1s;
+    -webkit-tap-highlight-color: transparent;
   }
   .line-options-btn:hover { color: var(--text); background: var(--bg3); }
+
+  .line-left-border {
+    width: 1px;
+    background: var(--border);
+    flex-shrink: 0;
+    align-self: stretch;
+  }
+  .line-right-border {
+    width: 1px;
+    background: var(--border);
+    flex-shrink: 0;
+    align-self: stretch;
+  }
 
   .add-line-btn {
     background: none;
     border: 0.5px dashed var(--border);
     border-radius: var(--radius);
     color: var(--text3);
-    padding: 7px 16px;
-    font-size: 12px;
+    padding: 8px 16px;
+    font-size: 13px;
     cursor: pointer;
     width: 100%;
     font-family: var(--sans);
     letter-spacing: 0.05em;
     transition: color 0.1s, border-color 0.1s;
+    -webkit-tap-highlight-color: transparent;
   }
   .add-line-btn:hover { color: var(--text2); border-color: var(--border2); }
 
@@ -184,9 +226,9 @@
     align-items: center;
     justify-content: center;
     transition: color 0.1s;
+    -webkit-tap-highlight-color: transparent;
   }
   .copy-btn:hover { color: var(--text); border-color: var(--border2); }
-  .copy-btn.copied { color: #5dbf7a; border-color: #5dbf7a44; }
 
   .menu-overlay {
     position: fixed;
@@ -194,7 +236,7 @@
     background: var(--bg3);
     border: 0.5px solid var(--border2);
     border-radius: var(--radius);
-    min-width: 200px;
+    min-width: 210px;
     overflow: hidden;
   }
   .menu-overlay button {
@@ -203,16 +245,40 @@
     text-align: left;
     background: none;
     border: none;
-    padding: 10px 14px;
-    font-size: 13px;
+    padding: 11px 14px;
+    font-size: 14px;
     color: var(--text);
     cursor: pointer;
     font-family: var(--sans);
     transition: background 0.1s;
+    -webkit-tap-highlight-color: transparent;
   }
   .menu-overlay button:hover { background: var(--bg2); }
   .menu-overlay button.danger { color: var(--danger); }
   .menu-divider { height: 0.5px; background: var(--border); margin: 2px 0; }
+
+  .toast {
+    position: fixed;
+    bottom: 32px;
+    left: 50%;
+    transform: translateX(-50%) translateY(10px);
+    background: var(--bg3);
+    border: 0.5px solid var(--border2);
+    border-radius: 20px;
+    padding: 9px 20px;
+    font-size: 13px;
+    color: var(--text);
+    font-family: var(--sans);
+    opacity: 0;
+    transition: opacity 0.16s ease, transform 0.16s ease;
+    pointer-events: none;
+    z-index: 500;
+    white-space: nowrap;
+  }
+  .toast.show {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+  }
 </style>
 </head>
 <body>
@@ -220,10 +286,10 @@
 <h1>Chord Chart Editor</h1>
 
 <div class="meta-grid">
-  <input id="m-title" placeholder="Title" />
-  <input id="m-composer" placeholder="Composer" />
-  <input id="m-feel" placeholder="Feel" />
-  <input id="m-key" placeholder="Key" />
+  <input id="m-title" placeholder="Title" autocomplete="off" autocorrect="off" autocapitalize="none" spellcheck="false" />
+  <input id="m-composer" placeholder="Composer" autocomplete="off" autocorrect="off" autocapitalize="none" spellcheck="false" />
+  <input id="m-feel" placeholder="Feel" autocomplete="off" autocorrect="off" autocapitalize="none" spellcheck="false" />
+  <input id="m-key" placeholder="Key" autocomplete="off" autocorrect="off" autocapitalize="none" spellcheck="false" />
 </div>
 
 <div class="lines-area" id="lines-area"></div>
@@ -233,7 +299,7 @@
   <div class="output-label">Output</div>
   <div class="output-wrap">
     <pre class="output-pre" id="output"></pre>
-    <button class="copy-btn" id="copy-btn" onclick="copyOutput()" title="Copy to clipboard">
+    <button class="copy-btn" onclick="copyOutput()" title="Copy">
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
         <rect x="9" y="9" width="13" height="13" rx="2"/>
         <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
@@ -242,12 +308,14 @@
   </div>
 </div>
 
+<div class="toast" id="toast"></div>
 <div id="menu-portal"></div>
 
 <script>
 let lines = [['','','',''],['','','',''],['','','',''],['','','','']];
 let menuState = null;
 let outputTimer = null;
+let toastTimer = null;
 
 const CONVERSIONS = [
   ['maj7','Δ7'],
@@ -263,12 +331,53 @@ function convertSymbols(s) {
   return r;
 }
 
-function padBar(raw) {
-  const s = convertSymbols(raw.trim());
-  if (!s) return '   %    ';
-  if (s === '%') return '   %    ';
-  if (s.length <= 8) return s.padEnd(8);
+// Parse user input into { openBar, content, closeBar }
+// |: at start means opening repeat, :| at end means closing repeat
+function parseBarInput(raw) {
+  let s = raw.trim();
+  let openBar = '';
+  let closeBar = '|';
+
+  if (s.startsWith('|:')) {
+    openBar = '|:';
+    s = s.slice(2).trim();
+  }
+  if (s.endsWith(':|')) {
+    closeBar = ':|';
+    s = s.slice(0, -2).trim();
+  }
+
+  return { openBar, content: s, closeBar };
+}
+
+function padContent(content, contentWidth) {
+  const s = convertSymbols(content);
+  if (!s || s === '%') {
+    // centre %
+    const total = contentWidth;
+    const side = Math.floor((total - 1) / 2);
+    return ' '.repeat(side) + '%' + ' '.repeat(total - side - 1);
+  }
+  if (s.length <= contentWidth) return s.padEnd(contentWidth);
   return s;
+}
+
+function formatBarOutput(raw, isFirst) {
+  const { openBar, content, closeBar } = parseBarInput(raw);
+  // content width: 8 normally, 7 if openBar is |: (costs 1 extra char)
+  const contentWidth = openBar === '|:' ? 7 : 8;
+  const padded = padContent(content, contentWidth);
+
+  let result = '';
+  if (isFirst) {
+    // First bar on line: only add openBar if it's a repeat sign
+    if (openBar === '|:') result = '|:' + padded + closeBar;
+    else result = padded + closeBar;
+  } else {
+    if (openBar === '|:') result = '|:' + padded + closeBar;
+    else result = padded + closeBar;
+  }
+  return result;
 }
 
 function buildOutput() {
@@ -278,13 +387,19 @@ function buildOutput() {
   const key = document.getElementById('m-key').value.trim();
 
   let out = '';
-  const titleLine = [title, composer ? '(' + composer + ')' : ''].filter(Boolean).join(' ');
+  const titlePart = title;
+  const composerPart = composer ? '(' + composer + ')' : '';
+  const titleLine = [titlePart, composerPart].filter(Boolean).join(' ');
   const feelLine = [feel, key].filter(Boolean).join(', ');
   if (titleLine) out += titleLine + '\n';
   if (feelLine) out += feelLine + '\n';
 
   lines.forEach(bars => {
-    out += bars.map(b => padBar(b) + '|').join('') + '\n';
+    let lineStr = '';
+    bars.forEach((raw, bi) => {
+      lineStr += formatBarOutput(raw, bi === 0);
+    });
+    out += lineStr + '\n';
   });
 
   document.getElementById('output').textContent = out.trimEnd();
@@ -303,32 +418,46 @@ function render() {
     const row = document.createElement('div');
     row.className = 'line-row';
 
+    // Left border of the row
+    const leftBorder = document.createElement('div');
+    leftBorder.style.cssText = 'width:1px;min-width:1px;background:var(--border);flex-shrink:0;align-self:stretch;border-radius:6px 0 0 6px;border-top:0.5px solid var(--border);border-bottom:0.5px solid var(--border);border-left:0.5px solid var(--border)';
+
+    const barsContainer = document.createElement('div');
+    barsContainer.className = 'bars-container';
+
     bars.forEach((val, bi) => {
       const inp = document.createElement('input');
       inp.className = 'bar-input';
       inp.value = val;
+      inp.setAttribute('autocomplete', 'off');
+      inp.setAttribute('autocorrect', 'off');
+      inp.setAttribute('autocapitalize', 'none');
+      inp.setAttribute('spellcheck', 'false');
       inp.addEventListener('input', e => {
         lines[li][bi] = e.target.value;
         scheduleOutput();
       });
 
-      if (bi === 0) {
-        inp.style.borderRadius = '6px 0 0 6px';
-      }
+      barsContainer.appendChild(inp);
 
+      // Add separator after each bar (acts as barline visual)
       const sep = document.createElement('div');
       sep.className = 'bar-sep';
-
-      row.appendChild(inp);
-      row.appendChild(sep);
+      barsContainer.appendChild(sep);
     });
 
     const optBtn = document.createElement('button');
     optBtn.className = 'line-options-btn';
-    optBtn.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="5" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="12" cy="19" r="1"/></svg>`;
+    optBtn.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="5" r="1.5" fill="currentColor"/><circle cx="12" cy="12" r="1.5" fill="currentColor"/><circle cx="12" cy="19" r="1.5" fill="currentColor"/></svg>`;
     optBtn.addEventListener('click', e => { e.stopPropagation(); showLineMenu(e, li); });
-    row.appendChild(optBtn);
 
+    // Outer border wrapper for the bars + left edge
+    const outerWrap = document.createElement('div');
+    outerWrap.style.cssText = 'display:flex;align-items:stretch;flex:1;min-width:0;border:0.5px solid var(--border);border-right:none;border-radius:6px 0 0 6px;overflow:hidden';
+    outerWrap.appendChild(barsContainer);
+
+    row.appendChild(outerWrap);
+    row.appendChild(optBtn);
     area.appendChild(row);
   });
 
@@ -341,14 +470,20 @@ function showLineMenu(e, li) {
   const m = document.createElement('div');
   m.className = 'menu-overlay';
 
-  const menuX = Math.min(rect.left, window.innerWidth - 210);
-  m.style.top = (rect.bottom + 4) + 'px';
-  m.style.left = menuX + 'px';
+  const menuW = 210;
+  let left = rect.right - menuW;
+  if (left < 8) left = 8;
+  if (left + menuW > window.innerWidth - 8) left = window.innerWidth - menuW - 8;
+  m.style.top = (rect.bottom + 6) + 'px';
+  m.style.left = left + 'px';
 
   const actions = [
     ['Add bar', () => { lines[li].push(''); render(); }],
     ['Remove empty bars', () => {
-      const filtered = lines[li].filter(b => b.trim() !== '' && b.trim() !== '%');
+      const filtered = lines[li].filter(b => {
+        const { content } = parseBarInput(b);
+        return content !== '' && content !== '%';
+      });
       lines[li] = filtered.length > 0 ? filtered : [''];
       render();
     }],
@@ -389,13 +524,21 @@ function addLine() {
   render();
 }
 
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => t.classList.remove('show'), 1800);
+}
+
 function copyOutput() {
   const text = document.getElementById('output').textContent;
   navigator.clipboard.writeText(text).then(() => {
-    const btn = document.getElementById('copy-btn');
-    btn.classList.add('copied');
-    setTimeout(() => btn.classList.remove('copied'), 1400);
-  }).catch(() => {});
+    showToast('Copied to clipboard');
+  }).catch(() => {
+    showToast('Copy failed');
+  });
 }
 
 ['m-title','m-composer','m-feel','m-key'].forEach(id => {
