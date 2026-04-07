@@ -286,10 +286,10 @@
 <h1>Chord Chart Editor</h1>
 
 <div class="meta-grid">
-  <input id="m-title" placeholder="Title" autocomplete="off" autocorrect="off" autocapitalize="none" spellcheck="false" />
-  <input id="m-composer" placeholder="Composer" autocomplete="off" autocorrect="off" autocapitalize="none" spellcheck="false" />
-  <input id="m-feel" placeholder="Feel" autocomplete="off" autocorrect="off" autocapitalize="none" spellcheck="false" />
-  <input id="m-key" placeholder="Key" autocomplete="off" autocorrect="off" autocapitalize="none" spellcheck="false" />
+  <input id="m-title" placeholder="Title" autocomplete="off" autocorrect="off" autocapitalize="words" spellcheck="false" />
+  <input id="m-composer" placeholder="Composer" autocomplete="off" autocorrect="off" autocapitalize="words" spellcheck="false" />
+  <input id="m-feel" placeholder="Feel" autocomplete="off" autocorrect="off" autocapitalize="words" spellcheck="false" />
+  <input id="m-key" placeholder="Key" autocomplete="off" autocorrect="off" autocapitalize="words" spellcheck="false" />
 </div>
 
 <div class="lines-area" id="lines-area"></div>
@@ -350,34 +350,60 @@ function parseBarInput(raw) {
   return { openBar, content: s, closeBar };
 }
 
-function padContent(content, contentWidth) {
-  const s = convertSymbols(content);
+// Total bar width is always 9 chars: openBar + content + closeBar
+// openBar: '' = 0 chars, '|:' = 2 chars
+// closeBar: '|' = 1 char, ':|' = 2 chars
+// contentWidth = 9 - openBar.length - closeBar.length
+// Exception: if chords cannot fit with min 1 space between them, allow wider content
+
+function layoutContent(raw, contentWidth) {
+  const s = convertSymbols(raw);
+
+  // Empty or repeat symbol — centre the %
   if (!s || s === '%') {
-    // centre %
-    const total = contentWidth;
-    const side = Math.floor((total - 1) / 2);
-    return ' '.repeat(side) + '%' + ' '.repeat(total - side - 1);
+    const side = Math.floor((contentWidth - 1) / 2);
+    return ' '.repeat(side) + '%' + ' '.repeat(contentWidth - side - 1);
   }
-  if (s.length <= contentWidth) return s.padEnd(contentWidth);
-  return s;
+
+  // Split on whitespace to get individual chord tokens
+  const tokens = s.split(/\s+/).filter(Boolean);
+
+  if (tokens.length === 1) {
+    // Single chord: left-align, pad to contentWidth
+    return tokens[0].padEnd(contentWidth);
+  }
+
+  if (tokens.length === 2) {
+    const [c1, c2] = tokens;
+    // Second chord target: midpoint of the content field
+    const midpoint = Math.floor(contentWidth / 2);
+    // Gap must be at least 1 space after c1
+    const minPos = c1.length + 1;
+    const pos = Math.max(minPos, midpoint);
+    if (pos + c2.length <= contentWidth) {
+      return c1.padEnd(pos) + c2.padEnd(contentWidth - pos);
+    } else {
+      // Overflow allowed: single space between chords
+      return c1 + ' ' + c2;
+    }
+  }
+
+  // Three or more chords: join with single space
+  const joined = tokens.join(' ');
+  if (joined.length <= contentWidth) return joined.padEnd(contentWidth);
+  return joined;
 }
 
-function formatBarOutput(raw, isFirst) {
+function formatBarOutput(raw, _isFirst) {
   const { openBar, content, closeBar } = parseBarInput(raw);
-  // content width: 8 normally, 7 if openBar is |: (costs 1 extra char)
-  const contentWidth = openBar === '|:' ? 7 : 8;
-  const padded = padContent(content, contentWidth);
+  // Total bar = 9 chars; derive contentWidth from what open/close consume
+  const openLen = openBar.length;   // 0 or 2
+  const closeLen = closeBar.length; // 1 or 2
+  const contentWidth = 9 - openLen - closeLen;
+  const padded = layoutContent(content, contentWidth);
 
-  let result = '';
-  if (isFirst) {
-    // First bar on line: only add openBar if it's a repeat sign
-    if (openBar === '|:') result = '|:' + padded + closeBar;
-    else result = padded + closeBar;
-  } else {
-    if (openBar === '|:') result = '|:' + padded + closeBar;
-    else result = padded + closeBar;
-  }
-  return result;
+  if (openBar === '|:') return '|:' + padded + closeBar;
+  return padded + closeBar;
 }
 
 function buildOutput() {
