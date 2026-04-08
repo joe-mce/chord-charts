@@ -61,11 +61,58 @@
   .meta-grid input:focus { border-color: var(--border2); }
   .meta-grid input::placeholder { color: var(--text3); }
 
+  /* Section block */
+  .section-block { margin-bottom: 10px; }
+
+  .section-header {
+    display: flex;
+    align-items: stretch;
+    gap: 0;
+    margin-bottom: 3px;
+  }
+
+  .section-title-btn {
+    background: none;
+    border: 0.5px solid var(--border);
+    border-right: none;
+    border-radius: var(--radius) 0 0 var(--radius);
+    padding: 5px 12px;
+    font-family: var(--mono);
+    font-size: 13px;
+    color: var(--text2);
+    cursor: pointer;
+    min-width: 52px;
+    text-align: left;
+    outline: none;
+    transition: color 0.1s, background 0.1s;
+    -webkit-tap-highlight-color: transparent;
+    white-space: nowrap;
+  }
+  .section-title-btn:hover { color: var(--text); background: var(--bg2); }
+  .section-title-btn.no-title { color: var(--text3); font-style: italic; }
+
+  .section-options-btn {
+    flex-shrink: 0;
+    background: none;
+    border: 0.5px solid var(--border);
+    border-radius: 0 var(--radius) var(--radius) 0;
+    padding: 5px 9px;
+    cursor: pointer;
+    color: var(--text3);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    outline: none;
+    transition: color 0.1s, background 0.1s;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .section-options-btn:hover { color: var(--text); background: var(--bg2); }
+
+  /* Lines */
   .lines-area {
     display: flex;
     flex-direction: column;
     gap: 3px;
-    margin-bottom: 8px;
   }
 
   .line-row {
@@ -80,14 +127,6 @@
     align-items: stretch;
     flex: 1;
     min-width: 0;
-  }
-
-  .bar-wrap {
-    display: flex;
-    align-items: stretch;
-    flex: 1;
-    min-width: 36px;
-    position: relative;
   }
 
   .bar-sep {
@@ -125,15 +164,6 @@
     position: relative;
   }
 
-  .line-start-border {
-    width: 1px;
-    min-width: 1px;
-    background: var(--border);
-    flex-shrink: 0;
-    align-self: stretch;
-    border-radius: var(--radius) 0 0 var(--radius);
-  }
-
   .line-options-btn {
     flex-shrink: 0;
     background: var(--bg2);
@@ -153,20 +183,15 @@
   }
   .line-options-btn:hover { color: var(--text); background: var(--bg3); }
 
-  .line-left-border {
-    width: 1px;
-    background: var(--border);
-    flex-shrink: 0;
-    align-self: stretch;
-  }
-  .line-right-border {
-    width: 1px;
-    background: var(--border);
-    flex-shrink: 0;
-    align-self: stretch;
+  /* Bottom buttons */
+  .bottom-btns {
+    display: flex;
+    gap: 5px;
+    margin-top: 3px;
   }
 
-  .add-line-btn {
+  .add-line-btn, .add-section-btn {
+    flex: 1;
     background: none;
     border: 0.5px dashed var(--border);
     border-radius: var(--radius);
@@ -174,14 +199,14 @@
     padding: 8px 16px;
     font-size: 13px;
     cursor: pointer;
-    width: 100%;
     font-family: var(--sans);
     letter-spacing: 0.05em;
     transition: color 0.1s, border-color 0.1s;
     -webkit-tap-highlight-color: transparent;
   }
-  .add-line-btn:hover { color: var(--text2); border-color: var(--border2); }
+  .add-line-btn:hover, .add-section-btn:hover { color: var(--text2); border-color: var(--border2); }
 
+  /* Output */
   .output-section { margin-top: 16px; }
 
   .output-label {
@@ -230,13 +255,14 @@
   }
   .copy-btn:hover { color: var(--text); border-color: var(--border2); }
 
+  /* Menus */
   .menu-overlay {
     position: fixed;
     z-index: 200;
     background: var(--bg3);
     border: 0.5px solid var(--border2);
     border-radius: var(--radius);
-    min-width: 210px;
+    min-width: 180px;
     overflow: hidden;
   }
   .menu-overlay button {
@@ -255,8 +281,25 @@
   }
   .menu-overlay button:hover { background: var(--bg2); }
   .menu-overlay button.danger { color: var(--danger); }
+  .menu-overlay button.active { font-weight: 700; }
   .menu-divider { height: 0.5px; background: var(--border); margin: 2px 0; }
 
+  .menu-custom-input {
+    display: none;
+    width: calc(100% - 28px);
+    margin: 4px 14px 10px;
+    background: var(--bg2);
+    border: 0.5px solid var(--border2);
+    border-radius: var(--radius);
+    padding: 8px 10px;
+    font-size: 14px;
+    color: var(--text);
+    font-family: var(--mono);
+    outline: none;
+  }
+  .menu-custom-input:focus { border-color: var(--text3); }
+
+  /* Toast */
   .toast {
     position: fixed;
     bottom: 32px;
@@ -275,10 +318,7 @@
     z-index: 500;
     white-space: nowrap;
   }
-  .toast.show {
-    opacity: 1;
-    transform: translateX(-50%) translateY(0);
-  }
+  .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
 </style>
 </head>
 <body>
@@ -286,14 +326,18 @@
 <h1>Chord Chart Editor</h1>
 
 <div class="meta-grid">
-  <input id="m-title" placeholder="Title" autocomplete="off" autocorrect="off" autocapitalize="words" spellcheck="false" />
+  <input id="m-title"    placeholder="Title"    autocomplete="off" autocorrect="off" autocapitalize="words" spellcheck="false" />
   <input id="m-composer" placeholder="Composer" autocomplete="off" autocorrect="off" autocapitalize="words" spellcheck="false" />
-  <input id="m-feel" placeholder="Feel" autocomplete="off" autocorrect="off" autocapitalize="words" spellcheck="false" />
-  <input id="m-key" placeholder="Key" autocomplete="off" autocorrect="off" autocapitalize="words" spellcheck="false" />
+  <input id="m-feel"     placeholder="Feel"     autocomplete="off" autocorrect="off" autocapitalize="words" spellcheck="false" />
+  <input id="m-key"      placeholder="Key"      autocomplete="off" autocorrect="off" autocapitalize="words" spellcheck="false" />
 </div>
 
-<div class="lines-area" id="lines-area"></div>
-<button class="add-line-btn" onclick="addLine()">+ add line</button>
+<div id="sections-area"></div>
+
+<div class="bottom-btns">
+  <button class="add-line-btn"    id="add-line-btn">+ add line</button>
+  <button class="add-section-btn" onclick="addSection()">+ add section</button>
+</div>
 
 <div class="output-section">
   <div class="output-label">Output</div>
@@ -312,120 +356,84 @@
 <div id="menu-portal"></div>
 
 <script>
-let lines = [['','','',''],['','','',''],['','','',''],['','','','']];
+// Data: sections is Array<{ title: string, lines: Array<Array<string>> }>
+// title === '' means no title (None)
+let sections = [
+  { title: 'A', lines: [['','','',''],['','','',''],['','','',''],['','','','']] }
+];
+
 let menuState = null;
 let outputTimer = null;
 let toastTimer = null;
 
+// ── Chord conversions ──────────────────────────────────────────────────────
 const CONVERSIONS = [
-  ['maj7','Δ7'],
-  ['m7','m7'],
-  ['h7','ø7'],
-  ['ø7','ø7'],
-  ['dim7','o'],
+  ['maj7','Δ7'], ['m7','m7'], ['h7','ø7'], ['ø7','ø7'], ['dim7','o'],
 ];
-
 function convertSymbols(s) {
   let r = s;
   CONVERSIONS.forEach(([f,t]) => { r = r.split(f).join(t); });
   return r;
 }
 
-// Parse user input into { openBar, content, closeBar }
-// |: at start means opening repeat, :| at end means closing repeat
+// ── Bar formatting ─────────────────────────────────────────────────────────
 function parseBarInput(raw) {
   let s = raw.trim();
-  let openBar = '';
-  let closeBar = '|';
-
-  if (s.startsWith('|:')) {
-    openBar = '|:';
-    s = s.slice(2).trim();
-  }
-  if (s.endsWith(':|')) {
-    closeBar = ':|';
-    s = s.slice(0, -2).trim();
-  }
-
+  let openBar = '', closeBar = '|';
+  if (s.startsWith('|:')) { openBar = '|:'; s = s.slice(2).trim(); }
+  if (s.endsWith(':|'))   { closeBar = ':|'; s = s.slice(0, -2).trim(); }
   return { openBar, content: s, closeBar };
 }
 
-// Total bar width is always 9 chars: openBar + content + closeBar
-// openBar: '' = 0 chars, '|:' = 2 chars
-// closeBar: '|' = 1 char, ':|' = 2 chars
-// contentWidth = 9 - openBar.length - closeBar.length
-// Exception: if chords cannot fit with min 1 space between them, allow wider content
-
 function layoutContent(raw, contentWidth) {
   const s = convertSymbols(raw);
-
-  // Empty or repeat symbol — centre the %
   if (!s || s === '%') {
     const side = Math.floor((contentWidth - 1) / 2);
     return ' '.repeat(side) + '%' + ' '.repeat(contentWidth - side - 1);
   }
-
-  // Split on whitespace to get individual chord tokens
   const tokens = s.split(/\s+/).filter(Boolean);
-
-  if (tokens.length === 1) {
-    // Single chord: left-align, pad to contentWidth
-    return tokens[0].padEnd(contentWidth);
-  }
-
+  if (tokens.length === 1) return tokens[0].padEnd(contentWidth);
   if (tokens.length === 2) {
     const [c1, c2] = tokens;
-    // Second chord target: midpoint of the content field
-    const midpoint = Math.floor(contentWidth / 2);
-    // Gap must be at least 1 space after c1
-    const minPos = c1.length + 1;
-    const pos = Math.max(minPos, midpoint);
-    if (pos + c2.length <= contentWidth) {
-      return c1.padEnd(pos) + c2.padEnd(contentWidth - pos);
-    } else {
-      // Overflow allowed: single space between chords
-      return c1 + ' ' + c2;
-    }
+    const pos = Math.max(c1.length + 1, Math.floor(contentWidth / 2));
+    if (pos + c2.length <= contentWidth) return c1.padEnd(pos) + c2.padEnd(contentWidth - pos);
+    return c1 + ' ' + c2;
   }
-
-  // Three or more chords: join with single space
   const joined = tokens.join(' ');
-  if (joined.length <= contentWidth) return joined.padEnd(contentWidth);
-  return joined;
+  return joined.length <= contentWidth ? joined.padEnd(contentWidth) : joined;
 }
 
-function formatBarOutput(raw, _isFirst) {
+function formatBarOutput(raw) {
   const { openBar, content, closeBar } = parseBarInput(raw);
-  // Total bar = 9 chars; derive contentWidth from what open/close consume
-  const openLen = openBar.length;   // 0 or 2
-  const closeLen = closeBar.length; // 1 or 2
-  const contentWidth = 9 - openLen - closeLen;
-  const padded = layoutContent(content, contentWidth);
-
-  if (openBar === '|:') return '|:' + padded + closeBar;
-  return padded + closeBar;
+  const cw = 9 - openBar.length - closeBar.length;
+  const padded = layoutContent(content, cw);
+  return (openBar === '|:' ? '|:' : '') + padded + closeBar;
 }
 
+// ── Output builder ─────────────────────────────────────────────────────────
 function buildOutput() {
-  const title = document.getElementById('m-title').value.trim();
+  const title    = document.getElementById('m-title').value.trim();
   const composer = document.getElementById('m-composer').value.trim();
-  const feel = document.getElementById('m-feel').value.trim();
-  const key = document.getElementById('m-key').value.trim();
+  const feel     = document.getElementById('m-feel').value.trim();
+  const key      = document.getElementById('m-key').value.trim();
 
   let out = '';
-  const titlePart = title;
   const composerPart = composer ? '(' + composer + ')' : '';
-  const titleLine = [titlePart, composerPart].filter(Boolean).join(' ');
-  const feelLine = [feel, key].filter(Boolean).join(', ');
+  const titleLine = [title, composerPart].filter(Boolean).join(' ');
+  const feelLine  = [feel, key].filter(Boolean).join(', ');
   if (titleLine) out += titleLine + '\n';
-  if (feelLine) out += feelLine + '\n';
+  if (feelLine)  out += feelLine  + '\n';
 
-  lines.forEach(bars => {
-    let lineStr = '';
-    bars.forEach((raw, bi) => {
-      lineStr += formatBarOutput(raw, bi === 0);
+  sections.forEach((sec, si) => {
+    // Blank line before every section except: first section with no title
+    const isFirst = si === 0;
+    if (!isFirst) out += '\n';
+
+    if (sec.title) out += '[' + sec.title + ']\n';
+
+    sec.lines.forEach(bars => {
+      out += bars.map(formatBarOutput).join('') + '\n';
     });
-    out += lineStr + '\n';
   });
 
   document.getElementById('output').textContent = out.trimEnd();
@@ -436,64 +444,180 @@ function scheduleOutput() {
   outputTimer = setTimeout(buildOutput, 280);
 }
 
+// ── Preset titles ──────────────────────────────────────────────────────────
+const PRESET_TITLES = ['None','A','B','C','D','Intro','Verse','Chorus','Solos','Riff','Outro'];
+
+// ── Render ─────────────────────────────────────────────────────────────────
 function render() {
-  const area = document.getElementById('lines-area');
+  const area = document.getElementById('sections-area');
   area.innerHTML = '';
 
-  lines.forEach((bars, li) => {
-    const row = document.createElement('div');
-    row.className = 'line-row';
+  sections.forEach((sec, si) => {
+    const block = document.createElement('div');
+    block.className = 'section-block';
 
-    // Left border of the row
-    const leftBorder = document.createElement('div');
-    leftBorder.style.cssText = 'width:1px;min-width:1px;background:var(--border);flex-shrink:0;align-self:stretch;border-radius:6px 0 0 6px;border-top:0.5px solid var(--border);border-bottom:0.5px solid var(--border);border-left:0.5px solid var(--border)';
+    // Header
+    const header = document.createElement('div');
+    header.className = 'section-header';
 
-    const barsContainer = document.createElement('div');
-    barsContainer.className = 'bars-container';
-
-    bars.forEach((val, bi) => {
-      const inp = document.createElement('input');
-      inp.className = 'bar-input';
-      inp.value = val;
-      inp.setAttribute('autocomplete', 'off');
-      inp.setAttribute('autocorrect', 'off');
-      inp.setAttribute('autocapitalize', 'words');
-      inp.setAttribute('spellcheck', 'false');
-      inp.addEventListener('input', e => {
-        lines[li][bi] = e.target.value;
-        scheduleOutput();
-      });
-
-      barsContainer.appendChild(inp);
-
-      // Add separator after each bar (acts as barline visual)
-      const sep = document.createElement('div');
-      sep.className = 'bar-sep';
-      barsContainer.appendChild(sep);
-    });
+    const titleBtn = document.createElement('button');
+    titleBtn.className = 'section-title-btn' + (sec.title ? '' : ' no-title');
+    titleBtn.textContent = sec.title || 'none';
+    titleBtn.setAttribute('tabindex', '-1');
+    titleBtn.addEventListener('click', e => { e.stopPropagation(); showTitleMenu(e, si); });
 
     const optBtn = document.createElement('button');
-    optBtn.className = 'line-options-btn';
-    optBtn.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="5" r="1.5" fill="currentColor"/><circle cx="12" cy="12" r="1.5" fill="currentColor"/><circle cx="12" cy="19" r="1.5" fill="currentColor"/></svg>`;
+    optBtn.className = 'section-options-btn';
     optBtn.setAttribute('tabindex', '-1');
-    optBtn.addEventListener('click', e => { e.stopPropagation(); showLineMenu(e, li); });
+    optBtn.innerHTML = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="5" r="1.5" fill="currentColor"/><circle cx="12" cy="12" r="1.5" fill="currentColor"/><circle cx="12" cy="19" r="1.5" fill="currentColor"/></svg>`;
+    optBtn.addEventListener('click', e => { e.stopPropagation(); showSectionMenu(e, si); });
 
-    // Outer border wrapper for the bars + left edge
-    const outerWrap = document.createElement('div');
-    outerWrap.style.cssText = 'display:flex;align-items:stretch;flex:1;min-width:0;border:0.5px solid var(--border);border-right:none;border-radius:6px 0 0 6px;overflow:hidden';
-    outerWrap.appendChild(barsContainer);
+    header.appendChild(titleBtn);
+    header.appendChild(optBtn);
+    block.appendChild(header);
 
-    row.appendChild(outerWrap);
-    row.appendChild(optBtn);
-    area.appendChild(row);
+    // Lines
+    const linesArea = document.createElement('div');
+    linesArea.className = 'lines-area';
+
+    sec.lines.forEach((bars, li) => {
+      const row = document.createElement('div');
+      row.className = 'line-row';
+
+      const outerWrap = document.createElement('div');
+      outerWrap.style.cssText = 'display:flex;align-items:stretch;flex:1;min-width:0;border:0.5px solid var(--border);border-right:none;border-radius:6px 0 0 6px;overflow:hidden';
+
+      const barsContainer = document.createElement('div');
+      barsContainer.className = 'bars-container';
+
+      bars.forEach((val, bi) => {
+        const inp = document.createElement('input');
+        inp.className = 'bar-input';
+        inp.value = val;
+        inp.setAttribute('autocomplete', 'off');
+        inp.setAttribute('autocorrect',  'off');
+        inp.setAttribute('autocapitalize', 'words');
+        inp.setAttribute('spellcheck',   'false');
+        inp.addEventListener('input', e => {
+          sections[si].lines[li][bi] = e.target.value;
+          scheduleOutput();
+        });
+        barsContainer.appendChild(inp);
+
+        const sep = document.createElement('div');
+        sep.className = 'bar-sep';
+        barsContainer.appendChild(sep);
+      });
+
+      outerWrap.appendChild(barsContainer);
+
+      const lineOptBtn = document.createElement('button');
+      lineOptBtn.className = 'line-options-btn';
+      lineOptBtn.setAttribute('tabindex', '-1');
+      lineOptBtn.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="5" r="1.5" fill="currentColor"/><circle cx="12" cy="12" r="1.5" fill="currentColor"/><circle cx="12" cy="19" r="1.5" fill="currentColor"/></svg>`;
+      lineOptBtn.addEventListener('click', e => { e.stopPropagation(); showLineMenu(e, si, li); });
+
+      row.appendChild(outerWrap);
+      row.appendChild(lineOptBtn);
+      linesArea.appendChild(row);
+    });
+
+    block.appendChild(linesArea);
+    area.appendChild(block);
   });
+
+  // "Add line" always appends to the last section
+  document.getElementById('add-line-btn').onclick = () => {
+    sections[sections.length - 1].lines.push(['','','','']);
+    render();
+  };
 
   buildOutput();
 }
 
-function showLineMenu(e, li) {
+// ── Title picker menu ──────────────────────────────────────────────────────
+function showTitleMenu(e, si) {
   closeMenu();
-  const rect = e.target.getBoundingClientRect();
+  const rect = e.currentTarget.getBoundingClientRect();
+  const m = document.createElement('div');
+  m.className = 'menu-overlay';
+  m.style.minWidth = '160px';
+
+  let left = rect.left;
+  const menuW = 170;
+  if (left + menuW > window.innerWidth - 8) left = window.innerWidth - menuW - 8;
+  if (left < 8) left = 8;
+  m.style.top  = (rect.bottom + 4) + 'px';
+  m.style.left = left + 'px';
+
+  const current = sections[si].title;
+
+  // Preset items
+  PRESET_TITLES.forEach(label => {
+    const value = label === 'None' ? '' : label;
+    const btn = document.createElement('button');
+    btn.textContent = label;
+    if (current === value) btn.classList.add('active');
+    btn.addEventListener('click', () => {
+      sections[si].title = value;
+      closeMenu();
+      render();
+    });
+    m.appendChild(btn);
+  });
+
+  // Divider + Custom
+  const div = document.createElement('div');
+  div.className = 'menu-divider';
+  m.appendChild(div);
+
+  const customBtn = document.createElement('button');
+  customBtn.textContent = 'Custom…';
+  // If current title is a custom one (not in presets), mark it active
+  const isCustom = current !== '' && !PRESET_TITLES.slice(1).includes(current);
+  if (isCustom) customBtn.classList.add('active');
+
+  const customInput = document.createElement('input');
+  customInput.className = 'menu-custom-input';
+  customInput.placeholder = 'Custom name…';
+  customInput.value = isCustom ? current : '';
+  customInput.setAttribute('autocapitalize', 'words');
+  customInput.setAttribute('autocorrect', 'off');
+  customInput.setAttribute('spellcheck', 'false');
+
+  function commitCustom() {
+    const val = customInput.value.trim();
+    if (val) { sections[si].title = val; }
+    closeMenu();
+    render();
+  }
+
+  customBtn.addEventListener('click', () => {
+    customBtn.style.display = 'none';
+    customInput.style.display = 'block';
+    customInput.focus();
+    customInput.select();
+  });
+  customInput.addEventListener('keydown', ev => {
+    if (ev.key === 'Enter')  { ev.preventDefault(); commitCustom(); }
+    if (ev.key === 'Escape') { closeMenu(); }
+  });
+  customInput.addEventListener('blur', () => {
+    setTimeout(commitCustom, 150);
+  });
+
+  m.appendChild(customBtn);
+  m.appendChild(customInput);
+
+  m.style.pointerEvents = 'all';
+  document.getElementById('menu-portal').appendChild(m);
+  menuState = m;
+}
+
+// ── Section options menu ───────────────────────────────────────────────────
+function showSectionMenu(e, si) {
+  closeMenu();
+  const rect = e.currentTarget.getBoundingClientRect();
   const m = document.createElement('div');
   m.className = 'menu-overlay';
 
@@ -501,33 +625,80 @@ function showLineMenu(e, li) {
   let left = rect.right - menuW;
   if (left < 8) left = 8;
   if (left + menuW > window.innerWidth - 8) left = window.innerWidth - menuW - 8;
-  m.style.top = (rect.bottom + 6) + 'px';
+  m.style.top  = (rect.bottom + 6) + 'px';
   m.style.left = left + 'px';
 
   const actions = [
-    ['Add bar', () => { lines[li].push(''); render(); }],
-    ['Remove empty bars', () => {
-      const filtered = lines[li].filter(b => {
-        const { content } = parseBarInput(b);
-        return content !== '' && content !== '%';
-      });
-      lines[li] = filtered.length > 0 ? filtered : [''];
+    ['Duplicate section', () => {
+      sections.splice(si + 1, 0, JSON.parse(JSON.stringify(sections[si])));
       render();
     }],
+    ['Move section up', () => {
+      if (si > 0) { [sections[si-1], sections[si]] = [sections[si], sections[si-1]]; render(); }
+    }],
+    ['Move section down', () => {
+      if (si < sections.length - 1) { [sections[si], sections[si+1]] = [sections[si+1], sections[si]]; render(); }
+    }],
     ['—'],
-    ['Add line above', () => { lines.splice(li, 0, ['','','','']); render(); }],
-    ['Add line below', () => { lines.splice(li + 1, 0, ['','','','']); render(); }],
-    ['—'],
-    ['Delete line', () => { if (lines.length > 1) { lines.splice(li, 1); render(); } }, 'danger'],
+    ['Delete section', () => {
+      if (sections.length > 1) { sections.splice(si, 1); render(); }
+    }, 'danger'],
   ];
 
   actions.forEach(([label, fn, cls]) => {
-    if (label === '—') {
-      const d = document.createElement('div');
-      d.className = 'menu-divider';
-      m.appendChild(d);
-      return;
-    }
+    if (label === '—') { const d = document.createElement('div'); d.className = 'menu-divider'; m.appendChild(d); return; }
+    const btn = document.createElement('button');
+    btn.textContent = label;
+    if (cls) btn.className = cls;
+    btn.addEventListener('click', () => { closeMenu(); fn(); });
+    m.appendChild(btn);
+  });
+
+  m.style.pointerEvents = 'all';
+  document.getElementById('menu-portal').appendChild(m);
+  menuState = m;
+}
+
+// ── Line options menu ──────────────────────────────────────────────────────
+function showLineMenu(e, si, li) {
+  closeMenu();
+  const rect = e.currentTarget.getBoundingClientRect();
+  const m = document.createElement('div');
+  m.className = 'menu-overlay';
+
+  const menuW = 210;
+  let left = rect.right - menuW;
+  if (left < 8) left = 8;
+  if (left + menuW > window.innerWidth - 8) left = window.innerWidth - menuW - 8;
+  m.style.top  = (rect.bottom + 6) + 'px';
+  m.style.left = left + 'px';
+
+  const actions = [
+    ['Add bar', () => { sections[si].lines[li].push(''); render(); }],
+    ['Remove empty bars', () => {
+      const filtered = sections[si].lines[li].filter(b => {
+        const { content } = parseBarInput(b);
+        return content !== '' && content !== '%';
+      });
+      sections[si].lines[li] = filtered.length > 0 ? filtered : [''];
+      render();
+    }],
+    ['—'],
+    ['Add line above', () => { sections[si].lines.splice(li, 0, ['','','','']); render(); }],
+    ['Add line below', () => { sections[si].lines.splice(li+1, 0, ['','','','']); render(); }],
+    ['—'],
+    ['Delete line', () => {
+      if (sections[si].lines.length > 1) {
+        sections[si].lines.splice(li, 1);
+      } else if (sections.length > 1) {
+        sections.splice(si, 1);
+      }
+      render();
+    }, 'danger'],
+  ];
+
+  actions.forEach(([label, fn, cls]) => {
+    if (label === '—') { const d = document.createElement('div'); d.className = 'menu-divider'; m.appendChild(d); return; }
     const btn = document.createElement('button');
     btn.textContent = label;
     if (cls) btn.className = cls;
@@ -543,14 +714,20 @@ function showLineMenu(e, li) {
 function closeMenu() {
   if (menuState) { menuState.remove(); menuState = null; }
 }
-
 document.addEventListener('click', closeMenu);
 
-function addLine() {
-  lines.push(['','','','']);
+// ── Add section ────────────────────────────────────────────────────────────
+function addSection() {
+  const lastTitle = sections[sections.length - 1].title;
+  let newTitle = '';
+  if (lastTitle === 'A') newTitle = 'B';
+  else if (lastTitle === 'B') newTitle = 'C';
+  else if (lastTitle === 'C') newTitle = 'D';
+  sections.push({ title: newTitle, lines: [['','','',''],['','','',''],['','','',''],['','','','']] });
   render();
 }
 
+// ── Toast & copy ───────────────────────────────────────────────────────────
 function showToast(msg) {
   const t = document.getElementById('toast');
   t.textContent = msg;
@@ -560,12 +737,9 @@ function showToast(msg) {
 }
 
 function copyOutput() {
-  const text = document.getElementById('output').textContent;
-  navigator.clipboard.writeText(text).then(() => {
-    showToast('Copied to clipboard');
-  }).catch(() => {
-    showToast('Copy failed');
-  });
+  navigator.clipboard.writeText(document.getElementById('output').textContent)
+    .then(() => showToast('Copied to clipboard'))
+    .catch(() => showToast('Copy failed'));
 }
 
 ['m-title','m-composer','m-feel','m-key'].forEach(id => {
