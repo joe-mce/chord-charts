@@ -255,6 +255,16 @@
   }
   .copy-btn:hover { color: var(--text); border-color: var(--border2); }
 
+  /* Calculated key hint */
+  .key-hint {
+    margin-top: 8px;
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--text3);
+    letter-spacing: 0.06em;
+    min-height: 16px;
+  }
+
   /* Menus */
   .menu-overlay {
     position: fixed;
@@ -352,8 +362,7 @@
     </button>
   </div>
 </div>
-
-<div class="toast" id="toast"></div>
+<div class="key-hint" id="key-hint"></div>
 <div id="menu-portal"></div>
 
 <script>
@@ -411,6 +420,141 @@ function formatBarOutput(raw) {
   return (openBar === '|:' ? '|:' : '') + padded + closeBar;
 }
 
+// ── Key detection ──────────────────────────────────────────────────────────
+
+// Map note names to semitone numbers (0=C)
+const NOTE_MAP = {
+  'C':0,'C#':1,'Db':1,'D':2,'D#':3,'Eb':3,'E':4,'F':5,
+  'F#':6,'Gb':6,'G':7,'G#':8,'Ab':8,'A':9,'A#':10,'Bb':10,'B':11
+};
+
+// Note names for display (sharps, then fall back to flats for black keys)
+const NOTE_NAMES = ['C','C#/Db','D','Eb','E','F','F#/Gb','G','Ab','A','Bb','B'];
+
+// In a major key, the major chords sit at these semitone offsets from the root:
+//   I (0), IV (5), V (7)
+// The minor chords sit at:
+//   ii (2), iii (4), vi (9)
+// (We skip vii° as diminished)
+const MAJOR_CHORD_OFFSETS = [0, 5, 7];
+const MINOR_CHORD_OFFSETS = [2, 4, 9];
+
+// Parse a raw bar value into an array of chord root+quality tokens,
+// returning null for empty / % (caller handles repetition).
+// Returns array of { semitone: number, isMinor: boolean } or null.
+function parseChordsFromBarValue(raw) {
+  const s = raw.trim();
+  if (!s || s === '%') return null; // signal: repeat previous
+
+  // Strip repeat markers
+  let content = s;
+  if (content.startsWith('|:')) content = content.slice(2).trim();
+  if (content.endsWith(':|'))   content = content.slice(0, -2).trim();
+  // strip slash-bass: "Gm7/F" -> "Gm7", "/F" -> ignore (pure bass note)
+  const tokens = content.split(/\s+/).filter(Boolean);
+
+  const result = [];
+  for (let tok of tokens) {
+    // strip slash-bass
+    const slashIdx = tok.indexOf('/');
+    if (slashIdx !== -1) tok = tok.slice(0, slashIdx);
+    if (!tok) continue;
+
+    // Parse note name (1 or 2 chars)
+    let noteName = '';
+    if (tok.length >= 2 && (tok[1] === '#' || tok[1] === 'b')) {
+      noteName = tok.slice(0, 2);
+    } else {
+      noteName = tok.slice(0, 1);
+    }
+    const semitone = NOTE_MAP[noteName];
+    if (semitone === undefined) continue; // unrecognised note
+
+    const suffix = tok.slice(noteName.length); // everything after root note
+
+    // Determine if minor
+    const isMinor = suffix.startsWith('m') && !/^maj/i.test(suffix);
+
+    // Exclude: purely dominant/extended chords with no minor prefix
+    // Excluded: X7, X9, X11, X13, Xø at the start of suffix
+    // (Xm7, Xm9 etc are NOT excluded — caught by isMinor above)
+    if (!isMinor) {
+      // Check if it's a dominant/half-dim that should be excluded
+      if (/^(7|9|11|13|ø)/.test(suffix)) continue;
+    }
+
+    result.push({ semitone, isMinor });
+  }
+  return result.length > 0 ? result : [];
+}
+
+// Walk all sections/lines/bars, resolve % repeats, accumulate weighted chord counts.
+// Returns Map<string, number> where key is e.g. "0:maj" or "9:min", value is bar-weight.
+function gatherChordWeights() {
+  const weights = new Map();
+  let prevChords = []; // chords from the last non-empty, non-% bar
+
+  for (const sec of sections) {
+    for (const bars of sec.lines) {
+      for (const raw of bars) {
+        const parsed = parseChordsFromBarValue(raw);
+        let chords;
+        if (parsed === null) {
+          // empty or % — repeat previous
+          chords = prevChords;
+        } else {
+          chords = parsed;
+          if (chords.length > 0) prevChords = chords;
+        }
+        // Each chord in this bar shares the bar's weight equally
+        const weight = chords.length > 0 ? 1 / chords.length : 0;
+        for (const { semitone, isMinor } of chords) {
+          const key = semitone + ':' + (isMinor ? 'min' : 'maj');
+          weights.set(key, (weights.get(key) || 0) + weight);
+        }
+      }
+    }
+  }
+  return weights;
+}
+
+function guessKey(weights) {
+  // Count distinct chords (regardless of weight) for threshold check
+  let distinctCount = 0;
+  for (const [, w] of weights) { if (w > 0) distinctCount++; }
+  if (distinctCount < 2) return null;
+
+  // Score each of the 12 major keys
+  let bestScore = -1;
+  let bestRoot  = -1;
+
+  for (let root = 0; root < 12; root++) {
+    let score = 0;
+    for (const offset of MAJOR_CHORD_OFFSETS) {
+      const k = ((root + offset) % 12) + ':maj';
+      score += (weights.get(k) || 0);
+    }
+    for (const offset of MINOR_CHORD_OFFSETS) {
+      const k = ((root + offset) % 12) + ':min';
+      score += (weights.get(k) || 0);
+    }
+    if (score > bestScore) { bestScore = score; bestRoot = root; }
+  }
+
+  if (bestScore === 0) return null;
+  return bestRoot;
+}
+
+function updateKeyHint() {
+  const el = document.getElementById('key-hint');
+  const weights = gatherChordWeights();
+  const root = guessKey(weights);
+  if (root === null) { el.textContent = ''; return; }
+  // Relative minor is 9 semitones above (= 3 semitones below) the major root
+  const minorRoot = (root + 9) % 12;
+  el.textContent = 'Calculated key: ' + NOTE_NAMES[root] + ' major / ' + NOTE_NAMES[minorRoot] + ' minor';
+}
+
 // ── Output builder ─────────────────────────────────────────────────────────
 function buildOutput() {
   const title     = document.getElementById('m-title').value.trim();
@@ -428,7 +572,6 @@ function buildOutput() {
   if (structure)  out += structure  + '\n';
 
   sections.forEach(sec => {
-    // Always a blank line before every section
     out += '\n';
     if (sec.title) out += '[' + sec.title + ']\n';
     sec.lines.forEach(bars => {
@@ -437,6 +580,7 @@ function buildOutput() {
   });
 
   document.getElementById('output').textContent = out.trimEnd();
+  updateKeyHint();
 }
 
 function scheduleOutput() {
