@@ -326,10 +326,11 @@
 <h1>Chord Chart Editor</h1>
 
 <div class="meta-grid">
-  <input id="m-title"    placeholder="Title"    autocomplete="off" autocorrect="off" autocapitalize="words" spellcheck="false" />
-  <input id="m-composer" placeholder="Composer" autocomplete="off" autocorrect="off" autocapitalize="words" spellcheck="false" />
-  <input id="m-feel"     placeholder="Feel"     autocomplete="off" autocorrect="off" autocapitalize="words" spellcheck="false" />
-  <input id="m-key"      placeholder="Key"      autocomplete="off" autocorrect="off" autocapitalize="words" spellcheck="false" />
+  <input id="m-title"     placeholder="Title"     autocomplete="off" autocorrect="off" autocapitalize="words" spellcheck="false" />
+  <input id="m-composer"  placeholder="Composer"  autocomplete="off" autocorrect="off" autocapitalize="words" spellcheck="false" />
+  <input id="m-feel"      placeholder="Feel"      autocomplete="off" autocorrect="off" autocapitalize="words" spellcheck="false" />
+  <input id="m-key"       placeholder="Key"       autocomplete="off" autocorrect="off" autocapitalize="words" spellcheck="false" />
+  <input id="m-structure" placeholder="Structure" autocomplete="off" autocorrect="off" autocapitalize="characters" spellcheck="false" style="grid-column:1/-1" />
 </div>
 
 <div id="sections-area"></div>
@@ -412,25 +413,24 @@ function formatBarOutput(raw) {
 
 // ── Output builder ─────────────────────────────────────────────────────────
 function buildOutput() {
-  const title    = document.getElementById('m-title').value.trim();
-  const composer = document.getElementById('m-composer').value.trim();
-  const feel     = document.getElementById('m-feel').value.trim();
-  const key      = document.getElementById('m-key').value.trim();
+  const title     = document.getElementById('m-title').value.trim();
+  const composer  = document.getElementById('m-composer').value.trim();
+  const feel      = document.getElementById('m-feel').value.trim();
+  const key       = document.getElementById('m-key').value.trim();
+  const structure = document.getElementById('m-structure').value.trim();
 
   let out = '';
   const composerPart = composer ? '(' + composer + ')' : '';
   const titleLine = [title, composerPart].filter(Boolean).join(' ');
   const feelLine  = [feel, key].filter(Boolean).join(', ');
-  if (titleLine) out += titleLine + '\n';
-  if (feelLine)  out += feelLine  + '\n';
+  if (titleLine)  out += titleLine  + '\n';
+  if (feelLine)   out += feelLine   + '\n';
+  if (structure)  out += structure  + '\n';
 
-  sections.forEach((sec, si) => {
-    // Blank line before every section except: first section with no title
-    const isFirst = si === 0;
-    if (!isFirst) out += '\n';
-
+  sections.forEach(sec => {
+    // Always a blank line before every section
+    out += '\n';
     if (sec.title) out += '[' + sec.title + ']\n';
-
     sec.lines.forEach(bars => {
       out += bars.map(formatBarOutput).join('') + '\n';
     });
@@ -592,12 +592,14 @@ function showTitleMenu(e, si) {
     render();
   }
 
-  customBtn.addEventListener('click', () => {
+  customBtn.addEventListener('click', e => {
+    e.stopPropagation();
     customBtn.style.display = 'none';
     customInput.style.display = 'block';
     customInput.focus();
     customInput.select();
   });
+  customInput.addEventListener('click', e => e.stopPropagation());
   customInput.addEventListener('keydown', ev => {
     if (ev.key === 'Enter')  { ev.preventDefault(); commitCustom(); }
     if (ev.key === 'Escape') { closeMenu(); }
@@ -683,6 +685,10 @@ function showLineMenu(e, si, li) {
       sections[si].lines[li] = filtered.length > 0 ? filtered : [''];
       render();
     }],
+    ['Clear line', () => {
+      sections[si].lines[li] = sections[si].lines[li].map(() => '');
+      render();
+    }],
     ['—'],
     ['Add line above', () => { sections[si].lines.splice(li, 0, ['','','','']); render(); }],
     ['Add line below', () => { sections[si].lines.splice(li+1, 0, ['','','','']); render(); }],
@@ -718,11 +724,16 @@ document.addEventListener('click', closeMenu);
 
 // ── Add section ────────────────────────────────────────────────────────────
 function addSection() {
-  const lastTitle = sections[sections.length - 1].title;
-  let newTitle = '';
-  if (lastTitle === 'A') newTitle = 'B';
-  else if (lastTitle === 'B') newTitle = 'C';
-  else if (lastTitle === 'C') newTitle = 'D';
+  const letters = ['A','B','C','D'];
+  // Find the highest letter used anywhere in the song
+  let highestIdx = -1;
+  sections.forEach(sec => {
+    const idx = letters.indexOf(sec.title);
+    if (idx > highestIdx) highestIdx = idx;
+  });
+  const newTitle = highestIdx >= 0 && highestIdx < letters.length - 1
+    ? letters[highestIdx + 1]
+    : '';
   sections.push({ title: newTitle, lines: [['','','',''],['','','',''],['','','',''],['','','','']] });
   render();
 }
@@ -742,7 +753,7 @@ function copyOutput() {
     .catch(() => showToast('Copy failed'));
 }
 
-['m-title','m-composer','m-feel','m-key'].forEach(id => {
+['m-title','m-composer','m-feel','m-key','m-structure'].forEach(id => {
   document.getElementById(id).addEventListener('input', scheduleOutput);
 });
 
