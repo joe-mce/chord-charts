@@ -446,6 +446,7 @@
   </div>
 </div>
 <div class="key-hint" id="key-hint"></div>
+<div class="toast" id="toast"></div>
 <div id="menu-portal"></div>
 
 <script>
@@ -804,23 +805,83 @@ function showSelectionMenu(e) {
   m.style.top  = (rect.bottom + 6) + 'px';
   m.style.left = left + 'px';
 
-  // Placeholder actions — to be implemented in a future step
-  const placeholders = ['Copy', 'Paste', 'Clear', 'Delete', 'Duplicate'];
-  placeholders.forEach(label => {
-    const btn2 = document.createElement('button');
-    btn2.textContent = label;
-    btn2.style.color = 'var(--text3)';
-    btn2.style.fontStyle = 'italic';
-    btn2.addEventListener('click', () => {
-      showToast(label + ' — coming soon');
-      closeMenu();
-    });
-    m.appendChild(btn2);
+  const actions = [
+    ['Copy',  () => actionCopy()],
+    ['Paste', () => actionPaste()],
+    ['Clear', () => actionClear()],
+  ];
+
+  actions.forEach(([label, fn]) => {
+    const b = document.createElement('button');
+    b.textContent = label;
+    b.addEventListener('click', () => { closeMenu(); fn(); });
+    m.appendChild(b);
   });
 
   m.style.pointerEvents = 'all';
   document.getElementById('menu-portal').appendChild(m);
   menuState = m;
+}
+
+// Return selected bar keys in document order
+function orderedSelectedKeys() {
+  // Build a flat ordered list of all bar keys, then filter to selected
+  const allKeys = [];
+  sections.forEach((sec, si) => {
+    sec.lines.forEach((bars, li) => {
+      bars.forEach((_, bi) => { allKeys.push(barKey(si, li, bi)); });
+    });
+  });
+  return allKeys.filter(k => selectedBars.has(k));
+}
+
+function getBarValue(k) {
+  const [si, li, bi] = k.split(':').map(Number);
+  return sections[si].lines[li][bi];
+}
+
+function setBarValue(k, val) {
+  const [si, li, bi] = k.split(':').map(Number);
+  sections[si].lines[li][bi] = val;
+}
+
+// Internal clipboard — stores array of raw bar values
+let internalClipboard = [];
+
+function actionCopy() {
+  const keys = orderedSelectedKeys();
+  if (!keys.length) return;
+  internalClipboard = keys.map(k => getBarValue(k));
+  const text = keys.map(k => formatBarOutput(getBarValue(k))).join('');
+  navigator.clipboard.writeText(text).catch(() => {});
+  selectedBars.clear();
+  updateSelectionUI();
+  showToast('Copied ' + keys.length + ' bar' + (keys.length > 1 ? 's' : ''));
+}
+
+function actionPaste() {
+  const keys = orderedSelectedKeys();
+  if (!keys.length) return;
+  if (!internalClipboard.length) { showToast('Nothing to paste'); return; }
+  keys.forEach((k, i) => {
+    setBarValue(k, internalClipboard[i % internalClipboard.length]);
+  });
+  selectedBars.clear();
+  render();
+  updateSelectionUI();
+  scheduleOutput();
+  showToast('Pasted into ' + keys.length + ' bar' + (keys.length > 1 ? 's' : ''));
+}
+
+function actionClear() {
+  const keys = orderedSelectedKeys();
+  if (!keys.length) return;
+  keys.forEach(k => setBarValue(k, ''));
+  selectedBars.clear();
+  render();
+  updateSelectionUI();
+  scheduleOutput();
+  showToast('Cleared ' + keys.length + ' bar' + (keys.length > 1 ? 's' : ''));
 }
 
 // ── Preset titles ──────────────────────────────────────────────────────────
