@@ -265,6 +265,76 @@
     min-height: 16px;
   }
 
+  /* Select mode toolbar */
+  .select-toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 5px;
+    margin-bottom: 6px;
+  }
+
+  .select-toggle-btn {
+    background: none;
+    border: 0.5px solid var(--border);
+    border-radius: var(--radius);
+    padding: 5px 10px;
+    font-size: 12px;
+    font-family: var(--sans);
+    color: var(--text3);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    letter-spacing: 0.04em;
+    transition: color 0.1s, background 0.1s, border-color 0.1s;
+    -webkit-tap-highlight-color: transparent;
+    user-select: none;
+    white-space: nowrap;
+  }
+  .select-toggle-btn:hover { color: var(--text2); border-color: var(--border2); }
+  .select-toggle-btn.active {
+    background: #2a2a40;
+    border-color: #5555aa;
+    color: #aaaaee;
+  }
+
+  .select-actions-btn {
+    background: var(--bg3);
+    border: 0.5px solid var(--border2);
+    border-radius: var(--radius);
+    padding: 5px 10px;
+    font-size: 12px;
+    font-family: var(--sans);
+    color: var(--text2);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    letter-spacing: 0.04em;
+    transition: color 0.1s, background 0.1s;
+    -webkit-tap-highlight-color: transparent;
+    white-space: nowrap;
+  }
+  .select-actions-btn:hover { background: var(--bg2); color: var(--text); }
+
+  /* Bar selected state */
+  .bar-input.bar-selected {
+    background: #1e1e38 !important;
+    border-top-color: #5555aa !important;
+    border-bottom-color: #5555aa !important;
+    color: #ccccff !important;
+    z-index: 1;
+    position: relative;
+  }
+
+  /* In select mode, bar inputs are read-only overlays */
+  body.select-mode .bar-input {
+    cursor: pointer;
+    caret-color: transparent;
+  }
+  body.select-mode .bar-input::selection { background: transparent; }
+
   /* Menus */
   .menu-overlay {
     position: fixed;
@@ -341,6 +411,19 @@
   <input id="m-feel"      placeholder="Feel"      autocomplete="off" autocorrect="off" autocapitalize="words" spellcheck="false" />
   <input id="m-key"       placeholder="Key"       autocomplete="off" autocorrect="off" autocapitalize="words" spellcheck="false" />
   <input id="m-structure" placeholder="Structure" autocomplete="off" autocorrect="off" autocapitalize="characters" spellcheck="false" style="grid-column:1/-1" />
+</div>
+
+<div class="select-toolbar" id="select-toolbar">
+  <div id="select-actions-wrap" style="display:none">
+    <button class="select-actions-btn" id="select-actions-btn" onclick="showSelectionMenu(event)">
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+      <span id="select-count">0</span> selected
+    </button>
+  </div>
+  <button class="select-toggle-btn" id="select-toggle-btn" onclick="toggleSelectMode()">
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1" opacity="0.4"/><rect x="3" y="14" width="7" height="7" rx="1" opacity="0.4"/><rect x="14" y="14" width="7" height="7" rx="1" opacity="0.4"/></svg>
+    Select
+  </button>
 </div>
 
 <div id="sections-area"></div>
@@ -584,6 +667,162 @@ function scheduleOutput() {
   outputTimer = setTimeout(buildOutput, 280);
 }
 
+// ── Select mode ────────────────────────────────────────────────────────────
+// Each selected bar is identified as "si:li:bi"
+let selectMode = false;
+let selectedBars = new Set();  // Set of "si:li:bi" strings
+let isDragSelecting = false;
+let dragSelectOriginKey = null; // key of bar where drag started
+// Map from "si:li:bi" -> state at drag start (true=was selected) for toggle-drag
+let dragStartStates = new Map();
+
+function barKey(si, li, bi) { return si + ':' + li + ':' + bi; }
+
+function toggleSelectMode() {
+  selectMode = !selectMode;
+  if (!selectMode) {
+    // Exiting: clear selection
+    selectedBars.clear();
+    updateSelectionUI();
+  }
+  const btn = document.getElementById('select-toggle-btn');
+  btn.classList.toggle('active', selectMode);
+  document.body.classList.toggle('select-mode', selectMode);
+  if (selectMode) {
+    // Blur any focused input
+    if (document.activeElement && document.activeElement.tagName === 'INPUT') {
+      document.activeElement.blur();
+    }
+  }
+  // Re-render to attach/detach select listeners
+  render();
+}
+
+function updateSelectionUI() {
+  // Update selected class on all bar inputs
+  document.querySelectorAll('.bar-input').forEach(inp => {
+    const k = inp.dataset.barKey;
+    inp.classList.toggle('bar-selected', selectedBars.has(k));
+  });
+  // Update count and show/hide actions button
+  const count = selectedBars.size;
+  document.getElementById('select-count').textContent = count;
+  document.getElementById('select-actions-wrap').style.display = count > 0 ? '' : 'none';
+}
+
+function getBarInputAtPoint(x, y) {
+  // Find which bar input (if any) is at the given client coordinates
+  const el = document.elementFromPoint(x, y);
+  if (!el) return null;
+  if (el.classList.contains('bar-input')) return el;
+  return null;
+}
+
+function onBarPointerDown(e, si, li, bi) {
+  if (!selectMode) return;
+  e.preventDefault();
+  e.stopPropagation();
+
+  const k = barKey(si, li, bi);
+  isDragSelecting = true;
+  dragSelectOriginKey = k;
+
+  // Record the starting state of this bar for toggle behaviour
+  dragStartStates.clear();
+  // We'll toggle the origin bar immediately
+  const wasSelected = selectedBars.has(k);
+  dragStartStates.set(k, wasSelected);
+  // Toggle: if it was selected, deselect; if not, select
+  if (wasSelected) selectedBars.delete(k); else selectedBars.add(k);
+  updateSelectionUI();
+
+  // Capture pointer for smooth drag across inputs
+  if (e.pointerId !== undefined) {
+    try { e.target.setPointerCapture(e.pointerId); } catch(_) {}
+  }
+}
+
+function onBarPointerEnter(e, si, li, bi) {
+  if (!selectMode || !isDragSelecting) return;
+  e.preventDefault();
+
+  const k = barKey(si, li, bi);
+  if (!dragStartStates.has(k)) {
+    // Newly entered bar during drag: match what we did to the origin bar
+    const originWasSelected = dragStartStates.get(dragSelectOriginKey);
+    // If origin was selected (we deselected it), deselect entered bars too
+    // If origin was not selected (we selected it), select entered bars
+    if (originWasSelected) {
+      selectedBars.delete(k);
+    } else {
+      selectedBars.add(k);
+    }
+    dragStartStates.set(k, selectedBars.has(k) !== !originWasSelected ? !originWasSelected : originWasSelected);
+    updateSelectionUI();
+  }
+}
+
+function onGlobalPointerUp(e) {
+  if (isDragSelecting) {
+    isDragSelecting = false;
+    dragSelectOriginKey = null;
+    dragStartStates.clear();
+  }
+}
+
+// Use pointer events on document to catch pointerup anywhere
+document.addEventListener('pointerup', onGlobalPointerUp);
+document.addEventListener('pointercancel', onGlobalPointerUp);
+
+// For touch/pointer dragging across elements (pointermove on document)
+document.addEventListener('pointermove', e => {
+  if (!selectMode || !isDragSelecting) return;
+  const el = document.elementFromPoint(e.clientX, e.clientY);
+  if (el && el.classList.contains('bar-input') && el.dataset.barKey) {
+    const k = el.dataset.barKey;
+    if (!dragStartStates.has(k)) {
+      const originWasSelected = dragStartStates.get(dragSelectOriginKey);
+      if (originWasSelected) { selectedBars.delete(k); }
+      else { selectedBars.add(k); }
+      dragStartStates.set(k, true); // mark visited
+      updateSelectionUI();
+    }
+  }
+});
+
+function showSelectionMenu(e) {
+  e.stopPropagation();
+  closeMenu();
+  const btn = document.getElementById('select-actions-btn');
+  const rect = btn.getBoundingClientRect();
+
+  const m = document.createElement('div');
+  m.className = 'menu-overlay';
+  const menuW = 200;
+  let left = rect.right - menuW;
+  if (left < 8) left = 8;
+  m.style.top  = (rect.bottom + 6) + 'px';
+  m.style.left = left + 'px';
+
+  // Placeholder actions — to be implemented in a future step
+  const placeholders = ['Copy', 'Paste', 'Clear', 'Delete', 'Duplicate'];
+  placeholders.forEach(label => {
+    const btn2 = document.createElement('button');
+    btn2.textContent = label;
+    btn2.style.color = 'var(--text3)';
+    btn2.style.fontStyle = 'italic';
+    btn2.addEventListener('click', () => {
+      showToast(label + ' — coming soon');
+      closeMenu();
+    });
+    m.appendChild(btn2);
+  });
+
+  m.style.pointerEvents = 'all';
+  document.getElementById('menu-portal').appendChild(m);
+  menuState = m;
+}
+
 // ── Preset titles ──────────────────────────────────────────────────────────
 const PRESET_TITLES = ['None','A','B','C','D','Intro','Verse','Chorus','Solos','Riff','Outro'];
 
@@ -634,14 +873,22 @@ function render() {
         const inp = document.createElement('input');
         inp.className = 'bar-input';
         inp.value = val;
+        inp.dataset.barKey = barKey(si, li, bi);
         inp.setAttribute('autocomplete', 'off');
         inp.setAttribute('autocorrect',  'off');
         inp.setAttribute('autocapitalize', 'words');
         inp.setAttribute('spellcheck',   'false');
-        inp.addEventListener('input', e => {
-          sections[si].lines[li][bi] = e.target.value;
-          scheduleOutput();
-        });
+        if (selectMode) {
+          inp.setAttribute('readonly', 'true');
+          inp.classList.toggle('bar-selected', selectedBars.has(barKey(si, li, bi)));
+          inp.addEventListener('pointerdown', e => onBarPointerDown(e, si, li, bi));
+          inp.addEventListener('pointerenter', e => onBarPointerEnter(e, si, li, bi));
+        } else {
+          inp.addEventListener('input', e => {
+            sections[si].lines[li][bi] = e.target.value;
+            scheduleOutput();
+          });
+        }
         barsContainer.appendChild(inp);
 
         const sep = document.createElement('div');
