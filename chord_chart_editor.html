@@ -20,6 +20,7 @@
     --mono: 'Courier New', Courier, monospace;
     --sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
     --radius: 6px;
+    --left-gutter: 28px;
   }
 
   body {
@@ -61,27 +62,81 @@
   .meta-grid input:focus { border-color: var(--border2); }
   .meta-grid input::placeholder { color: var(--text3); }
 
-  /* Section block */
-  .section-block { margin-bottom: 10px; }
-
-  .section-header {
+  /* Select mode toolbar */
+  .select-toolbar {
     display: flex;
-    align-items: stretch;
-    gap: 0;
-    margin-bottom: 3px;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 5px;
+    margin-bottom: 6px;
+  }
+  .select-toggle-btn {
+    background: none;
+    border: 0.5px solid var(--border);
+    border-radius: var(--radius);
+    padding: 5px 10px;
+    font-size: 12px;
+    font-family: var(--sans);
+    color: var(--text3);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    letter-spacing: 0.04em;
+    transition: color 0.1s, background 0.1s, border-color 0.1s;
+    -webkit-tap-highlight-color: transparent;
+    user-select: none;
+    white-space: nowrap;
+  }
+  .select-toggle-btn:hover { color: var(--text2); border-color: var(--border2); }
+  .select-toggle-btn.active { background: #2a2a40; border-color: #5555aa; color: #aaaaee; }
+
+  .select-actions-btn {
+    background: var(--bg3);
+    border: 0.5px solid var(--border2);
+    border-radius: var(--radius);
+    padding: 5px 10px;
+    font-size: 12px;
+    font-family: var(--sans);
+    color: var(--text2);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    letter-spacing: 0.04em;
+    transition: color 0.1s, background 0.1s;
+    -webkit-tap-highlight-color: transparent;
+    white-space: nowrap;
+  }
+  .select-actions-btn:hover { background: var(--bg2); color: var(--text); }
+
+  /* Lines area */
+  .lines-area {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    margin-bottom: 8px;
   }
 
+  /* Each line-block: optional title row + bar row */
+  .line-block { display: flex; flex-direction: column; gap: 2px; }
+
+  /* Title row — flush left, no gutter indent */
+  .title-row {
+    display: flex;
+    align-items: center;
+    gap: 0;
+  }
   .section-title-btn {
     background: none;
     border: 0.5px solid var(--border);
     border-right: none;
     border-radius: var(--radius) 0 0 var(--radius);
-    padding: 5px 12px;
+    padding: 4px 10px;
     font-family: var(--mono);
     font-size: 13px;
     color: var(--text2);
     cursor: pointer;
-    min-width: 52px;
     text-align: left;
     outline: none;
     transition: color 0.1s, background 0.1s;
@@ -89,38 +144,62 @@
     white-space: nowrap;
   }
   .section-title-btn:hover { color: var(--text); background: var(--bg2); }
-  .section-title-btn.no-title { color: var(--text3); font-style: italic; }
-
-  .section-options-btn {
+  .section-title-remove-btn {
     flex-shrink: 0;
     background: none;
     border: 0.5px solid var(--border);
+    border-left: none;
     border-radius: 0 var(--radius) var(--radius) 0;
-    padding: 5px 9px;
+    padding: 0 8px;
     cursor: pointer;
     color: var(--text3);
     display: flex;
     align-items: center;
     justify-content: center;
     outline: none;
+    line-height: 1;
+    align-self: stretch;
     transition: color 0.1s, background 0.1s;
     -webkit-tap-highlight-color: transparent;
   }
-  .section-options-btn:hover { color: var(--text); background: var(--bg2); }
+  .section-title-remove-btn:hover { color: var(--danger); background: var(--bg2); }
 
-  /* Lines */
-  .lines-area {
-    display: flex;
-    flex-direction: column;
-    gap: 3px;
-  }
-
-  .line-row {
+  /* Bar row */
+  .bar-row {
     display: flex;
     align-items: stretch;
     width: 100%;
     min-width: 0;
   }
+
+  /* Left gutter */
+  .line-gutter {
+    width: var(--left-gutter);
+    min-width: var(--left-gutter);
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .add-title-btn {
+    background: none;
+    border: none;
+    padding: 0;
+    cursor: pointer;
+    color: var(--text3);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 20px;
+    height: 20px;
+    border-radius: 4px;
+    font-size: 13px;
+    line-height: 1;
+    transition: color 0.1s, background 0.1s;
+    -webkit-tap-highlight-color: transparent;
+    opacity: 1;
+  }
+  .add-title-btn:hover { color: var(--text2); background: var(--bg2); }
 
   .bars-container {
     display: flex;
@@ -128,7 +207,6 @@
     flex: 1;
     min-width: 0;
   }
-
   .bar-sep {
     width: 1px;
     min-width: 1px;
@@ -136,7 +214,6 @@
     flex-shrink: 0;
     align-self: stretch;
   }
-
   .bar-input {
     flex: 1;
     min-width: 0;
@@ -163,6 +240,16 @@
     z-index: 1;
     position: relative;
   }
+  .bar-input.bar-selected {
+    background: #1e1e38 !important;
+    border-top-color: #5555aa !important;
+    border-bottom-color: #5555aa !important;
+    color: #ccccff !important;
+    z-index: 1;
+    position: relative;
+  }
+  body.select-mode .bar-input { cursor: pointer; caret-color: transparent; }
+  body.select-mode .bar-input::selection { background: transparent; }
 
   .line-options-btn {
     flex-shrink: 0;
@@ -183,15 +270,8 @@
   }
   .line-options-btn:hover { color: var(--text); background: var(--bg3); }
 
-  /* Bottom buttons */
-  .bottom-btns {
-    display: flex;
-    gap: 5px;
-    margin-top: 3px;
-  }
-
-  .add-line-btn, .add-section-btn {
-    flex: 1;
+  /* Add line button */
+  .add-line-btn {
     background: none;
     border: 0.5px dashed var(--border);
     border-radius: var(--radius);
@@ -199,16 +279,17 @@
     padding: 8px 16px;
     font-size: 13px;
     cursor: pointer;
+    width: 100%;
     font-family: var(--sans);
     letter-spacing: 0.05em;
     transition: color 0.1s, border-color 0.1s;
     -webkit-tap-highlight-color: transparent;
+    margin-bottom: 8px;
   }
-  .add-line-btn:hover, .add-section-btn:hover { color: var(--text2); border-color: var(--border2); }
+  .add-line-btn:hover { color: var(--text2); border-color: var(--border2); }
 
   /* Output */
   .output-section { margin-top: 16px; }
-
   .output-label {
     font-size: 11px;
     color: var(--text3);
@@ -217,7 +298,6 @@
     font-family: var(--mono);
     margin-bottom: 6px;
   }
-
   .output-wrap {
     position: relative;
     background: var(--bg2);
@@ -225,7 +305,6 @@
     border-radius: var(--radius);
     padding: 14px 42px 14px 14px;
   }
-
   .output-pre {
     font-family: var(--mono);
     font-size: 13px;
@@ -236,7 +315,6 @@
     scrollbar-width: thin;
     scrollbar-color: var(--border) transparent;
   }
-
   .copy-btn {
     position: absolute;
     top: 10px;
@@ -255,7 +333,6 @@
   }
   .copy-btn:hover { color: var(--text); border-color: var(--border2); }
 
-  /* Calculated key hint */
   .key-hint {
     margin-top: 8px;
     font-family: var(--mono);
@@ -264,76 +341,6 @@
     letter-spacing: 0.06em;
     min-height: 16px;
   }
-
-  /* Select mode toolbar */
-  .select-toolbar {
-    display: flex;
-    align-items: center;
-    justify-content: flex-end;
-    gap: 5px;
-    margin-bottom: 6px;
-  }
-
-  .select-toggle-btn {
-    background: none;
-    border: 0.5px solid var(--border);
-    border-radius: var(--radius);
-    padding: 5px 10px;
-    font-size: 12px;
-    font-family: var(--sans);
-    color: var(--text3);
-    cursor: pointer;
-    display: flex;
-    align-items: center;
-    gap: 5px;
-    letter-spacing: 0.04em;
-    transition: color 0.1s, background 0.1s, border-color 0.1s;
-    -webkit-tap-highlight-color: transparent;
-    user-select: none;
-    white-space: nowrap;
-  }
-  .select-toggle-btn:hover { color: var(--text2); border-color: var(--border2); }
-  .select-toggle-btn.active {
-    background: #2a2a40;
-    border-color: #5555aa;
-    color: #aaaaee;
-  }
-
-  .select-actions-btn {
-    background: var(--bg3);
-    border: 0.5px solid var(--border2);
-    border-radius: var(--radius);
-    padding: 5px 10px;
-    font-size: 12px;
-    font-family: var(--sans);
-    color: var(--text2);
-    cursor: pointer;
-    display: flex;
-    align-items: center;
-    gap: 5px;
-    letter-spacing: 0.04em;
-    transition: color 0.1s, background 0.1s;
-    -webkit-tap-highlight-color: transparent;
-    white-space: nowrap;
-  }
-  .select-actions-btn:hover { background: var(--bg2); color: var(--text); }
-
-  /* Bar selected state */
-  .bar-input.bar-selected {
-    background: #1e1e38 !important;
-    border-top-color: #5555aa !important;
-    border-bottom-color: #5555aa !important;
-    color: #ccccff !important;
-    z-index: 1;
-    position: relative;
-  }
-
-  /* In select mode, bar inputs are read-only overlays */
-  body.select-mode .bar-input {
-    cursor: pointer;
-    caret-color: transparent;
-  }
-  body.select-mode .bar-input::selection { background: transparent; }
 
   /* Menus */
   .menu-overlay {
@@ -363,7 +370,6 @@
   .menu-overlay button.danger { color: var(--danger); }
   .menu-overlay button.active { font-weight: 700; }
   .menu-divider { height: 0.5px; background: var(--border); margin: 2px 0; }
-
   .menu-custom-input {
     display: none;
     width: calc(100% - 28px);
@@ -426,12 +432,8 @@
   </button>
 </div>
 
-<div id="sections-area"></div>
-
-<div class="bottom-btns">
-  <button class="add-line-btn"    id="add-line-btn">+ add line</button>
-  <button class="add-section-btn" onclick="addSection()">+ add section</button>
-</div>
+<div class="lines-area" id="lines-area"></div>
+<button class="add-line-btn" id="add-line-btn" onclick="addLine()">+ add line</button>
 
 <div class="output-section">
   <div class="output-label">Output</div>
@@ -450,10 +452,14 @@
 <div id="menu-portal"></div>
 
 <script>
-// Data: sections is Array<{ title: string, lines: Array<Array<string>> }>
-// title === '' means no title (None)
-let sections = [
-  { title: 'A', lines: [['','','',''],['','','',''],['','','',''],['','','','']] }
+// ── Data model ─────────────────────────────────────────────────────────────
+// lines: Array<{ title: string, bars: Array<string> }>
+// title === '' means no section title on this line
+let lines = [
+  { title: 'A', bars: ['','','',''] },
+  { title: '',  bars: ['','','',''] },
+  { title: '',  bars: ['','','',''] },
+  { title: '',  bars: ['','','',''] },
 ];
 
 let menuState = null;
@@ -505,71 +511,37 @@ function formatBarOutput(raw) {
 }
 
 // ── Key detection ──────────────────────────────────────────────────────────
-
-// Map note names to semitone numbers (0=C)
 const NOTE_MAP = {
   'C':0,'C#':1,'Db':1,'D':2,'D#':3,'Eb':3,'E':4,'F':5,
   'F#':6,'Gb':6,'G':7,'G#':8,'Ab':8,'A':9,'A#':10,'Bb':10,'B':11
 };
-
-// Display names for major keys and their relative minors.
-// Enharmonic choices: prefer flats for major keys with >=6 flats (Gb, Db, Ab, Eb, Bb, F)
-// and for practical use: Gb and Db major; F# and C# minor.
 const MAJOR_KEY_NAMES = ['C','Db','D','Eb','E','F','Gb','G','Ab','A','Bb','B'];
 const MINOR_KEY_NAMES = ['C','C#','D','Eb','E','F','F#','G','Ab','A','Bb','B'];
-
-// In a major key:
-//   Major chords: I (0), IV (5)
-//   Minor chords: ii (2), iii (4), vi (9)
-//   Dominant (7/9/11/13): V (7)
-//   Half-diminished (ø): vii (11)
 const MAJOR_CHORD_OFFSETS = [0, 5];
 const MINOR_CHORD_OFFSETS = [2, 4, 9];
-const DOMINANT_OFFSET     = 7;
-const HALFDIM_OFFSET      = 11;
+const DOMINANT_OFFSET = 7;
+const HALFDIM_OFFSET  = 11;
 
-// Chord quality types
-// 'maj' | 'min' | 'dom' | 'hdim'
 function parseChordsFromBarValue(raw) {
   const s = raw.trim();
   if (!s || s === '%') return null;
-
   let content = s;
   if (content.startsWith('|:')) content = content.slice(2).trim();
   if (content.endsWith(':|'))   content = content.slice(0, -2).trim();
   const tokens = content.split(/\s+/).filter(Boolean);
-
   const result = [];
   for (let tok of tokens) {
-    const slashIdx = tok.indexOf('/');
-    if (slashIdx !== -1) tok = tok.slice(0, slashIdx);
+    const si = tok.indexOf('/'); if (si !== -1) tok = tok.slice(0, si);
     if (!tok) continue;
-
-    let noteName = '';
-    if (tok.length >= 2 && (tok[1] === '#' || tok[1] === 'b')) {
-      noteName = tok.slice(0, 2);
-    } else {
-      noteName = tok.slice(0, 1);
-    }
+    let noteName = (tok.length >= 2 && (tok[1]==='#'||tok[1]==='b')) ? tok.slice(0,2) : tok.slice(0,1);
     const semitone = NOTE_MAP[noteName];
     if (semitone === undefined) continue;
-
     const suffix = tok.slice(noteName.length);
-
-    // Half-diminished: ø (after symbol conversion) or the raw input form
     if (/^(ø|h7)/.test(suffix)) { result.push({ semitone, quality: 'hdim' }); continue; }
-
     const isMinor = suffix.startsWith('m') && !/^maj/i.test(suffix);
-
-    if (isMinor) {
-      result.push({ semitone, quality: 'min' });
-    } else if (/^(7|9|11|13)/.test(suffix)) {
-      // Dominant: X7, X9, X11, X13 (non-minor root)
-      result.push({ semitone, quality: 'dom' });
-    } else {
-      // Major: X, Xmaj7, X6, X69, Xadd9, Xsus etc — treated as major
-      result.push({ semitone, quality: 'maj' });
-    }
+    if (isMinor) result.push({ semitone, quality: 'min' });
+    else if (/^(7|9|11|13)/.test(suffix)) result.push({ semitone, quality: 'dom' });
+    else result.push({ semitone, quality: 'maj' });
   }
   return result.length > 0 ? result : [];
 }
@@ -577,23 +549,15 @@ function parseChordsFromBarValue(raw) {
 function gatherChordWeights() {
   const weights = new Map();
   let prevChords = [];
-
-  for (const sec of sections) {
-    for (const bars of sec.lines) {
-      for (const raw of bars) {
-        const parsed = parseChordsFromBarValue(raw);
-        let chords;
-        if (parsed === null) {
-          chords = prevChords;
-        } else {
-          chords = parsed;
-          if (chords.length > 0) prevChords = chords;
-        }
-        const weight = chords.length > 0 ? 1 / chords.length : 0;
-        for (const { semitone, quality } of chords) {
-          const key = semitone + ':' + quality;
-          weights.set(key, (weights.get(key) || 0) + weight);
-        }
+  for (const line of lines) {
+    for (const raw of line.bars) {
+      const parsed = parseChordsFromBarValue(raw);
+      let chords = parsed === null ? prevChords : parsed;
+      if (parsed !== null && chords.length > 0) prevChords = chords;
+      const weight = chords.length > 0 ? 1 / chords.length : 0;
+      for (const { semitone, quality } of chords) {
+        const k = semitone + ':' + quality;
+        weights.set(k, (weights.get(k) || 0) + weight);
       }
     }
   }
@@ -601,35 +565,23 @@ function gatherChordWeights() {
 }
 
 function guessKey(weights) {
-  // Count distinct chord entries for threshold
-  let distinctCount = 0;
-  for (const [, w] of weights) { if (w > 0) distinctCount++; }
-  if (distinctCount < 2) return null;
-
-  let bestScore = -1;
-  let bestRoot  = -1;
-
+  let d = 0; for (const [,w] of weights) if (w > 0) d++;
+  if (d < 2) return null;
+  let bestScore = -1, bestRoot = -1;
   for (let root = 0; root < 12; root++) {
     let score = 0;
-    for (const offset of MAJOR_CHORD_OFFSETS) {
-      score += weights.get(((root + offset) % 12) + ':maj') || 0;
-    }
-    for (const offset of MINOR_CHORD_OFFSETS) {
-      score += weights.get(((root + offset) % 12) + ':min') || 0;
-    }
-    score += weights.get(((root + DOMINANT_OFFSET) % 12) + ':dom') || 0;
-    score += weights.get(((root + HALFDIM_OFFSET)  % 12) + ':hdim') || 0;
-
+    for (const o of MAJOR_CHORD_OFFSETS) score += weights.get(((root+o)%12)+':maj') || 0;
+    for (const o of MINOR_CHORD_OFFSETS) score += weights.get(((root+o)%12)+':min') || 0;
+    score += weights.get(((root+DOMINANT_OFFSET)%12)+':dom')   || 0;
+    score += weights.get(((root+HALFDIM_OFFSET) %12)+':hdim')  || 0;
     if (score > bestScore) { bestScore = score; bestRoot = root; }
   }
-
   return bestScore === 0 ? null : bestRoot;
 }
 
 function updateKeyHint() {
   const el = document.getElementById('key-hint');
-  const weights = gatherChordWeights();
-  const root = guessKey(weights);
+  const root = guessKey(gatherChordWeights());
   if (root === null) { el.textContent = ''; return; }
   const minorRoot = (root + 9) % 12;
   el.textContent = 'Calculated key: ' + MAJOR_KEY_NAMES[root] + ' major / ' + MINOR_KEY_NAMES[minorRoot] + ' minor';
@@ -651,15 +603,14 @@ function buildOutput() {
   if (feelLine)   out += feelLine   + '\n';
   if (structure)  out += structure  + '\n';
 
-  sections.forEach(sec => {
-    out += '\n';
-    if (sec.title) out += '[' + sec.title + ']\n';
-    sec.lines.forEach(bars => {
-      out += bars.map(formatBarOutput).join('') + '\n';
-    });
+  lines.forEach(line => {
+    if (line.title) {
+      out += '\n[' + line.title + ']\n';
+    }
+    out += line.bars.map(formatBarOutput).join('') + '\n';
   });
 
-  document.getElementById('output').textContent = out.trimEnd();
+  document.getElementById('output').textContent = out.trim();
   updateKeyHint();
 }
 
@@ -668,102 +619,64 @@ function scheduleOutput() {
   outputTimer = setTimeout(buildOutput, 280);
 }
 
+// ── Section title helpers ──────────────────────────────────────────────────
+const PRESET_TITLES = ['A','B','C','D','Intro','Verse','Chorus','Solos','Riff','Outro'];
+
+function nextAvailableTitle() {
+  const usedTitles = new Set(lines.map(l => l.title).filter(Boolean));
+  for (const letter of ['A','B','C','D','E','F','G']) {
+    if (!usedTitles.has(letter)) return letter;
+  }
+  return '';
+}
+
 // ── Select mode ────────────────────────────────────────────────────────────
-// Each selected bar is identified as "si:li:bi"
 let selectMode = false;
-let selectedBars = new Set();  // Set of "si:li:bi" strings
+let selectedBars = new Set();
 let isDragSelecting = false;
-let dragSelectOriginKey = null; // key of bar where drag started
-// Map from "si:li:bi" -> state at drag start (true=was selected) for toggle-drag
+let dragSelectOriginKey = null;
 let dragStartStates = new Map();
 
-function barKey(si, li, bi) { return si + ':' + li + ':' + bi; }
+function barKey(li, bi) { return li + ':' + bi; }
 
 function toggleSelectMode() {
   selectMode = !selectMode;
-  if (!selectMode) {
-    // Exiting: clear selection
-    selectedBars.clear();
-    updateSelectionUI();
-  }
-  const btn = document.getElementById('select-toggle-btn');
-  btn.classList.toggle('active', selectMode);
+  if (!selectMode) { selectedBars.clear(); updateSelectionUI(); }
+  document.getElementById('select-toggle-btn').classList.toggle('active', selectMode);
   document.body.classList.toggle('select-mode', selectMode);
-  if (selectMode) {
-    // Blur any focused input
-    if (document.activeElement && document.activeElement.tagName === 'INPUT') {
-      document.activeElement.blur();
-    }
+  if (selectMode && document.activeElement && document.activeElement.tagName === 'INPUT') {
+    document.activeElement.blur();
   }
-  // Re-render to attach/detach select listeners
   render();
 }
 
 function updateSelectionUI() {
-  // Update selected class on all bar inputs
   document.querySelectorAll('.bar-input').forEach(inp => {
-    const k = inp.dataset.barKey;
-    inp.classList.toggle('bar-selected', selectedBars.has(k));
+    inp.classList.toggle('bar-selected', selectedBars.has(inp.dataset.barKey));
   });
-  // Update count and show/hide actions button
   const count = selectedBars.size;
   document.getElementById('select-count').textContent = count;
   document.getElementById('select-actions-wrap').style.display = count > 0 ? '' : 'none';
 }
 
-function getBarInputAtPoint(x, y) {
-  // Find which bar input (if any) is at the given client coordinates
-  const el = document.elementFromPoint(x, y);
-  if (!el) return null;
-  if (el.classList.contains('bar-input')) return el;
-  return null;
-}
-
-function onBarPointerDown(e, si, li, bi) {
+function onBarPointerDown(e, li, bi) {
   if (!selectMode) return;
   e.preventDefault();
   e.stopPropagation();
-
-  const k = barKey(si, li, bi);
+  const k = barKey(li, bi);
   isDragSelecting = true;
   dragSelectOriginKey = k;
-
-  // Record the starting state of this bar for toggle behaviour
   dragStartStates.clear();
-  // We'll toggle the origin bar immediately
   const wasSelected = selectedBars.has(k);
   dragStartStates.set(k, wasSelected);
-  // Toggle: if it was selected, deselect; if not, select
   if (wasSelected) selectedBars.delete(k); else selectedBars.add(k);
   updateSelectionUI();
-
-  // Capture pointer for smooth drag across inputs
   if (e.pointerId !== undefined) {
     try { e.target.setPointerCapture(e.pointerId); } catch(_) {}
   }
 }
 
-function onBarPointerEnter(e, si, li, bi) {
-  if (!selectMode || !isDragSelecting) return;
-  e.preventDefault();
-
-  const k = barKey(si, li, bi);
-  if (!dragStartStates.has(k)) {
-    // Newly entered bar during drag: match what we did to the origin bar
-    const originWasSelected = dragStartStates.get(dragSelectOriginKey);
-    // If origin was selected (we deselected it), deselect entered bars too
-    // If origin was not selected (we selected it), select entered bars
-    if (originWasSelected) {
-      selectedBars.delete(k);
-    } else {
-      selectedBars.add(k);
-    }
-    dragStartStates.set(k, selectedBars.has(k) !== !originWasSelected ? !originWasSelected : originWasSelected);
-    updateSelectionUI();
-  }
-}
-
-function onGlobalPointerUp(e) {
+function onGlobalPointerUp() {
   if (isDragSelecting) {
     isDragSelecting = false;
     dragSelectOriginKey = null;
@@ -771,11 +684,8 @@ function onGlobalPointerUp(e) {
   }
 }
 
-// Use pointer events on document to catch pointerup anywhere
 document.addEventListener('pointerup', onGlobalPointerUp);
 document.addEventListener('pointercancel', onGlobalPointerUp);
-
-// For touch/pointer dragging across elements (pointermove on document)
 document.addEventListener('pointermove', e => {
   if (!selectMode || !isDragSelecting) return;
   const el = document.elementFromPoint(e.clientX, e.clientY);
@@ -783,9 +693,8 @@ document.addEventListener('pointermove', e => {
     const k = el.dataset.barKey;
     if (!dragStartStates.has(k)) {
       const originWasSelected = dragStartStates.get(dragSelectOriginKey);
-      if (originWasSelected) { selectedBars.delete(k); }
-      else { selectedBars.add(k); }
-      dragStartStates.set(k, true); // mark visited
+      if (originWasSelected) selectedBars.delete(k); else selectedBars.add(k);
+      dragStartStates.set(k, true);
       updateSelectionUI();
     }
   }
@@ -796,56 +705,41 @@ function showSelectionMenu(e) {
   closeMenu();
   const btn = document.getElementById('select-actions-btn');
   const rect = btn.getBoundingClientRect();
-
   const m = document.createElement('div');
   m.className = 'menu-overlay';
   const menuW = 200;
   let left = rect.right - menuW;
   if (left < 8) left = 8;
-  m.style.top  = (rect.bottom + 6) + 'px';
+  m.style.top = (rect.bottom + 6) + 'px';
   m.style.left = left + 'px';
-
-  const actions = [
-    ['Copy',  () => actionCopy()],
-    ['Paste', () => actionPaste()],
-    ['Clear', () => actionClear()],
-  ];
-
-  actions.forEach(([label, fn]) => {
+  [['Copy', actionCopy], ['Paste', actionPaste], ['Clear', actionClear]].forEach(([label, fn]) => {
     const b = document.createElement('button');
     b.textContent = label;
     b.addEventListener('click', () => { closeMenu(); fn(); });
     m.appendChild(b);
   });
-
   m.style.pointerEvents = 'all';
   document.getElementById('menu-portal').appendChild(m);
   menuState = m;
 }
 
-// Return selected bar keys in document order
 function orderedSelectedKeys() {
-  // Build a flat ordered list of all bar keys, then filter to selected
   const allKeys = [];
-  sections.forEach((sec, si) => {
-    sec.lines.forEach((bars, li) => {
-      bars.forEach((_, bi) => { allKeys.push(barKey(si, li, bi)); });
-    });
+  lines.forEach((line, li) => {
+    line.bars.forEach((_, bi) => allKeys.push(barKey(li, bi)));
   });
   return allKeys.filter(k => selectedBars.has(k));
 }
 
 function getBarValue(k) {
-  const [si, li, bi] = k.split(':').map(Number);
-  return sections[si].lines[li][bi];
+  const [li, bi] = k.split(':').map(Number);
+  return lines[li].bars[bi];
 }
-
 function setBarValue(k, val) {
-  const [si, li, bi] = k.split(':').map(Number);
-  sections[si].lines[li][bi] = val;
+  const [li, bi] = k.split(':').map(Number);
+  lines[li].bars[bi] = val;
 }
 
-// Internal clipboard — stores array of raw bar values
 let internalClipboard = [];
 
 function actionCopy() {
@@ -863,9 +757,7 @@ function actionPaste() {
   const keys = orderedSelectedKeys();
   if (!keys.length) return;
   if (!internalClipboard.length) { showToast('Nothing to paste'); return; }
-  keys.forEach((k, i) => {
-    setBarValue(k, internalClipboard[i % internalClipboard.length]);
-  });
+  keys.forEach((k, i) => setBarValue(k, internalClipboard[i % internalClipboard.length]));
   selectedBars.clear();
   render();
   updateSelectionUI();
@@ -884,107 +776,115 @@ function actionClear() {
   showToast('Cleared ' + keys.length + ' bar' + (keys.length > 1 ? 's' : ''));
 }
 
-// ── Preset titles ──────────────────────────────────────────────────────────
-const PRESET_TITLES = ['None','A','B','C','D','Intro','Verse','Chorus','Solos','Riff','Outro'];
-
 // ── Render ─────────────────────────────────────────────────────────────────
 function render() {
-  const area = document.getElementById('sections-area');
+  const area = document.getElementById('lines-area');
   area.innerHTML = '';
 
-  sections.forEach((sec, si) => {
+  lines.forEach((line, li) => {
     const block = document.createElement('div');
-    block.className = 'section-block';
+    block.className = 'line-block';
 
-    // Header
-    const header = document.createElement('div');
-    header.className = 'section-header';
+    // Title row (only if line has a section title)
+    if (line.title) {
+      const titleRow = document.createElement('div');
+      titleRow.className = 'title-row';
 
-    const titleBtn = document.createElement('button');
-    titleBtn.className = 'section-title-btn' + (sec.title ? '' : ' no-title');
-    titleBtn.textContent = sec.title || 'none';
-    titleBtn.setAttribute('tabindex', '-1');
-    titleBtn.addEventListener('click', e => { e.stopPropagation(); showTitleMenu(e, si); });
+      const titleBtn = document.createElement('button');
+      titleBtn.className = 'section-title-btn';
+      titleBtn.textContent = '¶ ' + line.title;
+      titleBtn.setAttribute('tabindex', '-1');
+      titleBtn.addEventListener('click', e => { e.stopPropagation(); showTitleMenu(e, li); });
 
-    const optBtn = document.createElement('button');
-    optBtn.className = 'section-options-btn';
-    optBtn.setAttribute('tabindex', '-1');
-    optBtn.innerHTML = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="5" r="1.5" fill="currentColor"/><circle cx="12" cy="12" r="1.5" fill="currentColor"/><circle cx="12" cy="19" r="1.5" fill="currentColor"/></svg>`;
-    optBtn.addEventListener('click', e => { e.stopPropagation(); showSectionMenu(e, si); });
-
-    header.appendChild(titleBtn);
-    header.appendChild(optBtn);
-    block.appendChild(header);
-
-    // Lines
-    const linesArea = document.createElement('div');
-    linesArea.className = 'lines-area';
-
-    sec.lines.forEach((bars, li) => {
-      const row = document.createElement('div');
-      row.className = 'line-row';
-
-      const outerWrap = document.createElement('div');
-      outerWrap.style.cssText = 'display:flex;align-items:stretch;flex:1;min-width:0;border:0.5px solid var(--border);border-right:none;border-radius:6px 0 0 6px;overflow:hidden';
-
-      const barsContainer = document.createElement('div');
-      barsContainer.className = 'bars-container';
-
-      bars.forEach((val, bi) => {
-        const inp = document.createElement('input');
-        inp.className = 'bar-input';
-        inp.value = val;
-        inp.dataset.barKey = barKey(si, li, bi);
-        inp.setAttribute('autocomplete', 'off');
-        inp.setAttribute('autocorrect',  'off');
-        inp.setAttribute('autocapitalize', 'words');
-        inp.setAttribute('spellcheck',   'false');
-        if (selectMode) {
-          inp.setAttribute('readonly', 'true');
-          inp.classList.toggle('bar-selected', selectedBars.has(barKey(si, li, bi)));
-          inp.addEventListener('pointerdown', e => onBarPointerDown(e, si, li, bi));
-          inp.addEventListener('pointerenter', e => onBarPointerEnter(e, si, li, bi));
-        } else {
-          inp.addEventListener('input', e => {
-            sections[si].lines[li][bi] = e.target.value;
-            scheduleOutput();
-          });
-        }
-        barsContainer.appendChild(inp);
-
-        const sep = document.createElement('div');
-        sep.className = 'bar-sep';
-        barsContainer.appendChild(sep);
+      const removeBtn = document.createElement('button');
+      removeBtn.className = 'section-title-remove-btn';
+      removeBtn.setAttribute('tabindex', '-1');
+      removeBtn.setAttribute('title', 'Remove section title');
+      removeBtn.innerHTML = `<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>`;
+      removeBtn.addEventListener('click', e => {
+        e.stopPropagation();
+        lines[li].title = '';
+        render();
       });
 
-      outerWrap.appendChild(barsContainer);
+      titleRow.appendChild(titleBtn);
+      titleRow.appendChild(removeBtn);
+      block.appendChild(titleRow);
+    }
 
-      const lineOptBtn = document.createElement('button');
-      lineOptBtn.className = 'line-options-btn';
-      lineOptBtn.setAttribute('tabindex', '-1');
-      lineOptBtn.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="5" r="1.5" fill="currentColor"/><circle cx="12" cy="12" r="1.5" fill="currentColor"/><circle cx="12" cy="19" r="1.5" fill="currentColor"/></svg>`;
-      lineOptBtn.addEventListener('click', e => { e.stopPropagation(); showLineMenu(e, si, li); });
+    // Bar row
+    const barRow = document.createElement('div');
+    barRow.className = 'bar-row';
 
-      row.appendChild(outerWrap);
-      row.appendChild(lineOptBtn);
-      linesArea.appendChild(row);
+    // Left gutter
+    const gutter = document.createElement('div');
+    gutter.className = 'line-gutter';
+    if (!line.title) {
+      const addTitleBtn = document.createElement('button');
+      addTitleBtn.className = 'add-title-btn';
+      addTitleBtn.setAttribute('tabindex', '-1');
+      addTitleBtn.setAttribute('title', 'Add section title');
+      addTitleBtn.textContent = '¶';
+      addTitleBtn.addEventListener('click', e => {
+        e.stopPropagation();
+        lines[li].title = nextAvailableTitle();
+        render();
+      });
+      gutter.appendChild(addTitleBtn);
+    }
+    barRow.appendChild(gutter);
+
+    // Bars outer wrap
+    const outerWrap = document.createElement('div');
+    outerWrap.style.cssText = 'display:flex;align-items:stretch;flex:1;min-width:0;border:0.5px solid var(--border);border-right:none;border-radius:6px 0 0 6px;overflow:hidden';
+
+    const barsContainer = document.createElement('div');
+    barsContainer.className = 'bars-container';
+
+    line.bars.forEach((val, bi) => {
+      const inp = document.createElement('input');
+      inp.className = 'bar-input';
+      inp.value = val;
+      inp.dataset.barKey = barKey(li, bi);
+      inp.setAttribute('autocomplete', 'off');
+      inp.setAttribute('autocorrect', 'off');
+      inp.setAttribute('autocapitalize', 'words');
+      inp.setAttribute('spellcheck', 'false');
+      if (selectMode) {
+        inp.setAttribute('readonly', 'true');
+        inp.classList.toggle('bar-selected', selectedBars.has(barKey(li, bi)));
+        inp.addEventListener('pointerdown', e => onBarPointerDown(e, li, bi));
+      } else {
+        inp.addEventListener('input', e => {
+          lines[li].bars[bi] = e.target.value;
+          scheduleOutput();
+        });
+      }
+      barsContainer.appendChild(inp);
+      const sep = document.createElement('div');
+      sep.className = 'bar-sep';
+      barsContainer.appendChild(sep);
     });
 
-    block.appendChild(linesArea);
+    outerWrap.appendChild(barsContainer);
+
+    const lineOptBtn = document.createElement('button');
+    lineOptBtn.className = 'line-options-btn';
+    lineOptBtn.setAttribute('tabindex', '-1');
+    lineOptBtn.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="5" r="1.5" fill="currentColor"/><circle cx="12" cy="12" r="1.5" fill="currentColor"/><circle cx="12" cy="19" r="1.5" fill="currentColor"/></svg>`;
+    lineOptBtn.addEventListener('click', e => { e.stopPropagation(); showLineMenu(e, li); });
+
+    barRow.appendChild(outerWrap);
+    barRow.appendChild(lineOptBtn);
+    block.appendChild(barRow);
     area.appendChild(block);
   });
-
-  // "Add line" always appends to the last section
-  document.getElementById('add-line-btn').onclick = () => {
-    sections[sections.length - 1].lines.push(['','','','']);
-    render();
-  };
 
   buildOutput();
 }
 
 // ── Title picker menu ──────────────────────────────────────────────────────
-function showTitleMenu(e, si) {
+function showTitleMenu(e, li) {
   closeMenu();
   const rect = e.currentTarget.getBoundingClientRect();
   const m = document.createElement('div');
@@ -998,30 +898,26 @@ function showTitleMenu(e, si) {
   m.style.top  = (rect.bottom + 4) + 'px';
   m.style.left = left + 'px';
 
-  const current = sections[si].title;
+  const current = lines[li].title;
 
-  // Preset items
   PRESET_TITLES.forEach(label => {
-    const value = label === 'None' ? '' : label;
     const btn = document.createElement('button');
     btn.textContent = label;
-    if (current === value) btn.classList.add('active');
+    if (current === label) btn.classList.add('active');
     btn.addEventListener('click', () => {
-      sections[si].title = value;
+      lines[li].title = label;
       closeMenu();
       render();
     });
     m.appendChild(btn);
   });
 
-  // Divider + Custom
   const div = document.createElement('div');
   div.className = 'menu-divider';
   m.appendChild(div);
 
   const customBtn = document.createElement('button');
   customBtn.textContent = 'Custom…';
-  // If current title is a custom one (not in presets), mark it active
   const isCustom = current !== '' && !PRESET_TITLES.slice(1).includes(current);
   if (isCustom) customBtn.classList.add('active');
 
@@ -1035,7 +931,7 @@ function showTitleMenu(e, si) {
 
   function commitCustom() {
     const val = customInput.value.trim();
-    if (val) { sections[si].title = val; }
+    if (val) lines[li].title = val;
     closeMenu();
     render();
   }
@@ -1052,65 +948,17 @@ function showTitleMenu(e, si) {
     if (ev.key === 'Enter')  { ev.preventDefault(); commitCustom(); }
     if (ev.key === 'Escape') { closeMenu(); }
   });
-  customInput.addEventListener('blur', () => {
-    setTimeout(commitCustom, 150);
-  });
+  customInput.addEventListener('blur', () => setTimeout(commitCustom, 150));
 
   m.appendChild(customBtn);
   m.appendChild(customInput);
-
-  m.style.pointerEvents = 'all';
-  document.getElementById('menu-portal').appendChild(m);
-  menuState = m;
-}
-
-// ── Section options menu ───────────────────────────────────────────────────
-function showSectionMenu(e, si) {
-  closeMenu();
-  const rect = e.currentTarget.getBoundingClientRect();
-  const m = document.createElement('div');
-  m.className = 'menu-overlay';
-
-  const menuW = 210;
-  let left = rect.right - menuW;
-  if (left < 8) left = 8;
-  if (left + menuW > window.innerWidth - 8) left = window.innerWidth - menuW - 8;
-  m.style.top  = (rect.bottom + 6) + 'px';
-  m.style.left = left + 'px';
-
-  const actions = [
-    ['Duplicate section', () => {
-      sections.splice(si + 1, 0, JSON.parse(JSON.stringify(sections[si])));
-      render();
-    }],
-    ['Move section up', () => {
-      if (si > 0) { [sections[si-1], sections[si]] = [sections[si], sections[si-1]]; render(); }
-    }],
-    ['Move section down', () => {
-      if (si < sections.length - 1) { [sections[si], sections[si+1]] = [sections[si+1], sections[si]]; render(); }
-    }],
-    ['—'],
-    ['Delete section', () => {
-      if (sections.length > 1) { sections.splice(si, 1); render(); }
-    }, 'danger'],
-  ];
-
-  actions.forEach(([label, fn, cls]) => {
-    if (label === '—') { const d = document.createElement('div'); d.className = 'menu-divider'; m.appendChild(d); return; }
-    const btn = document.createElement('button');
-    btn.textContent = label;
-    if (cls) btn.className = cls;
-    btn.addEventListener('click', () => { closeMenu(); fn(); });
-    m.appendChild(btn);
-  });
-
   m.style.pointerEvents = 'all';
   document.getElementById('menu-portal').appendChild(m);
   menuState = m;
 }
 
 // ── Line options menu ──────────────────────────────────────────────────────
-function showLineMenu(e, si, li) {
+function showLineMenu(e, li) {
   closeMenu();
   const rect = e.currentTarget.getBoundingClientRect();
   const m = document.createElement('div');
@@ -1124,35 +972,42 @@ function showLineMenu(e, si, li) {
   m.style.left = left + 'px';
 
   const actions = [
-    ['Add bar', () => { sections[si].lines[li].push(''); render(); }],
+    ['Add bar', () => { lines[li].bars.push(''); render(); }],
     ['Remove empty bars', () => {
-      const filtered = sections[si].lines[li].filter(b => {
+      const filtered = lines[li].bars.filter(b => {
         const { content } = parseBarInput(b);
         return content !== '' && content !== '%';
       });
-      sections[si].lines[li] = filtered.length > 0 ? filtered : [''];
+      lines[li].bars = filtered.length > 0 ? filtered : [''];
       render();
     }],
     ['Clear line', () => {
-      sections[si].lines[li] = sections[si].lines[li].map(() => '');
+      lines[li].bars = lines[li].bars.map(() => '');
       render();
     }],
     ['—'],
-    ['Add line above', () => { sections[si].lines.splice(li, 0, ['','','','']); render(); }],
-    ['Add line below', () => { sections[si].lines.splice(li+1, 0, ['','','','']); render(); }],
+    ['Move line up', () => {
+      if (li > 0) { [lines[li-1], lines[li]] = [lines[li], lines[li-1]]; render(); }
+    }],
+    ['Move line down', () => {
+      if (li < lines.length - 1) { [lines[li], lines[li+1]] = [lines[li+1], lines[li]]; render(); }
+    }],
+    ['—'],
+    ['Add line above', () => { lines.splice(li, 0, { title: '', bars: ['','','',''] }); render(); }],
+    ['Add line below', () => { lines.splice(li+1, 0, { title: '', bars: ['','','',''] }); render(); }],
     ['—'],
     ['Delete line', () => {
-      if (sections[si].lines.length > 1) {
-        sections[si].lines.splice(li, 1);
-      } else if (sections.length > 1) {
-        sections.splice(si, 1);
-      }
-      render();
+      if (lines.length > 1) { lines.splice(li, 1); render(); }
     }, 'danger'],
   ];
 
   actions.forEach(([label, fn, cls]) => {
-    if (label === '—') { const d = document.createElement('div'); d.className = 'menu-divider'; m.appendChild(d); return; }
+    if (label === '—') {
+      const d = document.createElement('div');
+      d.className = 'menu-divider';
+      m.appendChild(d);
+      return;
+    }
     const btn = document.createElement('button');
     btn.textContent = label;
     if (cls) btn.className = cls;
@@ -1170,23 +1025,12 @@ function closeMenu() {
 }
 document.addEventListener('click', closeMenu);
 
-// ── Add section ────────────────────────────────────────────────────────────
-function addSection() {
-  const letters = ['A','B','C','D'];
-  // Find the highest letter used anywhere in the song
-  let highestIdx = -1;
-  sections.forEach(sec => {
-    const idx = letters.indexOf(sec.title);
-    if (idx > highestIdx) highestIdx = idx;
-  });
-  const newTitle = highestIdx >= 0 && highestIdx < letters.length - 1
-    ? letters[highestIdx + 1]
-    : '';
-  sections.push({ title: newTitle, lines: [['','','',''],['','','',''],['','','',''],['','','','']] });
+function addLine() {
+  lines.push({ title: '', bars: ['','','',''] });
   render();
 }
 
-// ── Toast & copy ───────────────────────────────────────────────────────────
+// ── Toast & copy output ────────────────────────────────────────────────────
 function showToast(msg) {
   const t = document.getElementById('toast');
   t.textContent = msg;
