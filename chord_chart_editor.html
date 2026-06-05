@@ -1023,72 +1023,46 @@ function exportIReal() {
     // Simple approach: expand structure fully — repeat sections as needed.
     // For sections that appear multiple times consecutively in structure, add { } repeats.
 
-    // Build repeat info: for each occurrence in structure, check if it needs repeats
-    // For now: just expand inline (duplicate the bars). Repeats on a section only if
-    // it appears >=2 consecutive times in structure.
-    repeatMap = new Map();
-
-    orderedSectionTitles = structureParsed.map((title, idx) => title + '_0');
-    // Map structure letters to chart sections (first occurrence only)
-    // e.g. AABA -> A_0, A_0, B_0, A_0
-
-    // Check for consecutive repeats and mark { }
-    const expanded = structureParsed.map((title, idx) => {
-      const prev = idx > 0 ? structureParsed[idx-1] : null;
-      const next = idx < structureParsed.length-1 ? structureParsed[idx+1] : null;
-      const isFirst = prev !== title;
-      const isLast = next !== title;
-      const count = structureParsed.filter(t => t === title).length;
-
-      return { title, idx, isFirst, isLast, count };
-    });
-
-    // Rebuild orderedSectionTitles as title_occurrence pairs
-    const titleOccurrence = new Map();
-    orderedSectionTitles = structureParsed.map(title => {
-      const occ = titleOccurrence.get(title) || 0;
-      titleOccurrence.set(title, occ + 1);
-      return title + '_' + occ; // but all map to _0 in sectionMap
-    });
-
-    // For repeat detection: if a section letter appears exactly 2 times
-    // consecutively in structure and chart has it once, wrap with { }
-    // Track which orderedSectionTitles entries get repeat open/close
+    // Build the ordered play sequence, collapsing consecutive runs into
+    // single repeat-bracketed entries, expanding non-consecutive repeats inline.
+    // Each entry: { title, openRepeat, closeRepeat }
+    const playSequence = [];
     let i = 0;
     while (i < structureParsed.length) {
       const title = structureParsed[i];
       let run = 1;
       while (i + run < structureParsed.length && structureParsed[i + run] === title) run++;
       if (run >= 2) {
-        // Mark first occurrence open repeat, last close repeat
-        repeatMap.set(title + '_' + i, { open: true, close: false });
-        repeatMap.set(title + '_' + (i + run - 1), { open: false, close: true });
+        playSequence.push({ title, openRepeat: true, closeRepeat: true });
+      } else {
+        playSequence.push({ title, openRepeat: false, closeRepeat: false });
       }
       i += run;
     }
 
-    // Now remap orderedSectionTitles to resolve all to _0 (first occurrence in chart)
-    // since we only have one copy of each section
-    orderedSectionTitles = structureParsed.map(title => title);
+    orderedSectionTitles = playSequence;
 
   } else {
-    // No structure: just use sections in order, each once
-    orderedSectionTitles = sectionGroups.map(s => s.title || '');
+    // No structure: just use sections in order, each once, no repeats
+    orderedSectionTitles = sectionGroups.map(s => ({
+      title: s.title || '',
+      openRepeat: false,
+      closeRepeat: false,
+    }));
   }
 
-  // Build chord block using simple sequential approach
+  // Build chord block
   let block = '';
   let isFirstSec = true;
   let prevChords = [];
-  const titleOcc2 = new Map();
 
-  // Resolve a title to its section group
+  // Resolve a title to its section group (always uses first occurrence in chart)
   function resolveSection(title) {
-    // Always use first occurrence
     return sectionMap.get(title) || sectionMap.get(title + '_0');
   }
 
-  orderedSectionTitles.forEach((title, secIdx) => {
+  orderedSectionTitles.forEach((entry, secIdx) => {
+    const title = entry.title;
     const sec = resolveSection(title);
     if (!sec) return;
 
@@ -1099,23 +1073,16 @@ function exportIReal() {
     });
     if (!allBars.length) return;
 
-    const occ = titleOcc2.get(title) || 0;
-    titleOcc2.set(title, occ + 1);
-    const repeatInfo = repeatMap ? repeatMap.get(title + '_' + secIdx) : null;
-
     const rehearsalMark = toIRealSection(title);
     const isLastSec = secIdx === orderedSectionTitles.length - 1;
 
-    // Determine section-level barlines
-    // Each section: opens with [ or { (double or repeat), closes with ] or } or Z
-    // User repeat signs on individual bars take precedence
     const firstBarRaw = allBars[0];
     const lastBarRaw  = allBars[allBars.length - 1];
     const { openBar: userFirstOpen } = parseBarInput(firstBarRaw);
     const { closeBar: userLastClose } = parseBarInput(lastBarRaw);
 
-    const useOpenRepeat  = (repeatInfo?.open)  || userFirstOpen === '|:';
-    const useCloseRepeat = (repeatInfo?.close) || userLastClose === ':|';
+    const useOpenRepeat  = (entry.openRepeat)  || userFirstOpen === '|:';
+    const useCloseRepeat = (entry.closeRepeat) || userLastClose === ':|';
 
     allBars.forEach((raw, bi) => {
       const isFirstBar = bi === 0;
