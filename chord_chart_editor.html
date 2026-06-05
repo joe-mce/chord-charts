@@ -351,14 +351,22 @@
   }
   .output-menu-btn:hover { color: var(--text); border-color: var(--border2); }
 
-  .key-hint {
-    margin-top: 8px;
+  /* Key suggestion pills — sit inside the key input on the RHS */
+  .key-pill {
+    background: var(--bg3);
+    border: 0.5px solid var(--border2);
+    border-radius: 20px;
+    padding: 4px 9px;
+    font-size: 12px;
     font-family: var(--mono);
-    font-size: 11px;
     color: var(--text3);
-    letter-spacing: 0.06em;
-    min-height: 16px;
+    cursor: pointer;
+    transition: color 0.1s, background 0.1s;
+    -webkit-tap-highlight-color: transparent;
+    white-space: nowrap;
+    line-height: 1;
   }
+  .key-pill:hover { color: var(--text); background: var(--border2); }
 
   /* Menus */
   .menu-overlay {
@@ -433,7 +441,10 @@
   <input id="m-title"     placeholder="Title"     autocomplete="off" autocorrect="off" autocapitalize="words" spellcheck="false" />
   <input id="m-composer"  placeholder="Composer"  autocomplete="off" autocorrect="off" autocapitalize="words" spellcheck="false" />
   <input id="m-feel"      placeholder="Feel"      autocomplete="off" autocorrect="off" autocapitalize="words" spellcheck="false" />
-  <input id="m-key"       placeholder="Key"       autocomplete="off" autocorrect="off" autocapitalize="words" spellcheck="false" />
+  <div style="position:relative;min-width:0;">
+    <input id="m-key" placeholder="Key" autocomplete="off" autocorrect="off" autocapitalize="words" spellcheck="false" style="width:100%;padding-right:70px" />
+    <div id="key-pills-row" style="position:absolute;right:6px;top:50%;transform:translateY(-50%);display:flex;gap:4px;pointer-events:auto;"></div>
+  </div>
   <input id="m-structure" placeholder="Structure" autocomplete="off" autocorrect="off" autocapitalize="characters" spellcheck="false" style="grid-column:1/-1" />
 </div>
 
@@ -468,7 +479,6 @@
     </button>
   </div>
 </div>
-<div class="key-hint" id="key-hint"></div>
 <div class="toast" id="toast"></div>
 <div id="menu-portal"></div>
 
@@ -537,7 +547,7 @@ const NOTE_MAP = {
   'F#':6,'Gb':6,'G':7,'G#':8,'Ab':8,'A':9,'A#':10,'Bb':10,'B':11
 };
 const MAJOR_KEY_NAMES = ['C','Db','D','Eb','E','F','Gb','G','Ab','A','Bb','B'];
-const MINOR_KEY_NAMES = ['C','C#','D','Eb','E','F','F#','G','Ab','A','Bb','B'];
+const MINOR_KEY_NAMES = ['C','C#','D','D#','E','F','F#','G','G#','A','Bb','B'];
 const MAJOR_CHORD_OFFSETS = [0, 5];
 const MINOR_CHORD_OFFSETS = [2, 4, 9];
 const DOMINANT_OFFSET = 7;
@@ -600,12 +610,45 @@ function guessKey(weights) {
   return bestScore === 0 ? null : bestRoot;
 }
 
-function updateKeyHint() {
-  const el = document.getElementById('key-hint');
+function updateKeyPills() {
+  const row = document.getElementById('key-pills-row');
+  const keyInput = document.getElementById('m-key');
+
+  // Hide when focused or has any value
+  if (document.activeElement === keyInput || keyInput.value.trim() !== '') {
+    row.innerHTML = '';
+    return;
+  }
+
   const root = guessKey(gatherChordWeights());
-  if (root === null) { el.textContent = ''; return; }
-  const minorRoot = (root + 9) % 12;
-  el.textContent = 'Calculated key: ' + MAJOR_KEY_NAMES[root] + ' major / ' + MINOR_KEY_NAMES[minorRoot] + ' minor';
+  if (root === null) { row.innerHTML = ''; return; }
+
+  const minorRoot  = (root + 9) % 12;
+  const majorFull  = MAJOR_KEY_NAMES[root] + ' major';
+  const minorFull  = MINOR_KEY_NAMES[minorRoot] + ' minor';
+  const majorShort = MAJOR_KEY_NAMES[root];
+  const minorShort = MINOR_KEY_NAMES[minorRoot] + 'm';
+
+  row.innerHTML = '';
+  [[majorShort, majorFull], [minorShort, minorFull]].forEach(([short, full]) => {
+    const pill = document.createElement('button');
+    pill.className = 'key-pill';
+    pill.textContent = short;
+    pill.title = full;
+    pill.addEventListener('mousedown', e => {
+      e.preventDefault();
+      keyInput.value = full;
+      keyInput.dispatchEvent(new Event('input'));
+      row.innerHTML = '';
+    });
+    pill.addEventListener('touchend', e => {
+      e.preventDefault();
+      keyInput.value = full;
+      keyInput.dispatchEvent(new Event('input'));
+      row.innerHTML = '';
+    });
+    row.appendChild(pill);
+  });
 }
 
 // ── Output builder ─────────────────────────────────────────────────────────
@@ -632,7 +675,7 @@ function buildOutput() {
   });
 
   document.getElementById('output').textContent = out.trim();
-  updateKeyHint();
+  updateKeyPills();
 }
 
 function scheduleOutput() {
@@ -1409,6 +1452,12 @@ function copyOutput() {
 ['m-title','m-composer','m-feel','m-key','m-structure'].forEach(id => {
   document.getElementById(id).addEventListener('input', scheduleOutput);
 });
+
+// Hide pills when key input is focused; restore on blur
+const keyInput = document.getElementById('m-key');
+keyInput.addEventListener('focus', () => updateKeyPills());
+keyInput.addEventListener('blur',  () => setTimeout(updateKeyPills, 50));
+keyInput.addEventListener('input', () => updateKeyPills());
 
 render();
 </script>
