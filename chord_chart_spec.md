@@ -2,8 +2,8 @@
 
 ## Header
 Line 1: Title (Composer surname or brief credit)
-Line 2: Feel/style, Key
-Then chart begins immediately (no blank line).
+Line 2: Feel/style e.g. Swing, Key e.g. Ab major
+Line 3: Structure e.g. AABA
 
 ## Bars
 - 9 chars per bar: 8 chars content + `|`

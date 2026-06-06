@@ -431,11 +431,146 @@
     white-space: nowrap;
   }
   .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+  /* Menu button */
+  .menu-btn {
+    background: none;
+    border: 0.5px solid var(--border);
+    border-radius: var(--radius);
+    padding: 5px 8px;
+    cursor: pointer;
+    color: var(--text3);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 30px;
+    height: 30px;
+    transition: color 0.1s, background 0.1s, border-color 0.1s;
+    -webkit-tap-highlight-color: transparent;
+    flex-shrink: 0;
+    outline: none;
+  }
+  .menu-btn:hover { color: var(--text2); border-color: var(--border2); }
+
+  /* Import modal */
+  .import-modal-backdrop {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.5);
+    display: none;
+    align-items: center;
+    justify-content: center;
+    z-index: 2000;
+    padding: 14px;
+  }
+
+  .import-modal-backdrop.active {
+    display: flex;
+  }
+
+  .import-modal {
+    background: var(--bg2);
+    border: 0.5px solid var(--border);
+    border-radius: var(--radius);
+    padding: 20px;
+    max-width: 500px;
+    width: 100%;
+    max-height: 80vh;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+  }
+
+  .import-modal h2 {
+    font-size: 16px;
+    color: var(--text);
+    margin: 0;
+    font-weight: 500;
+  }
+
+  .import-modal textarea {
+    background: var(--bg);
+    border: 0.5px solid var(--border);
+    border-radius: var(--radius);
+    padding: 10px;
+    font-size: 13px;
+    font-family: var(--mono);
+    color: var(--text);
+    outline: none;
+    resize: vertical;
+    flex: 1;
+    min-height: 200px;
+  }
+
+  .import-modal textarea:focus {
+    border-color: var(--border2);
+  }
+
+  .import-modal textarea::placeholder {
+    color: var(--text3);
+  }
+
+  .import-modal-buttons {
+    display: flex;
+    gap: 8px;
+    justify-content: flex-end;
+  }
+
+  .import-modal-buttons button {
+    background: var(--bg3);
+    border: 0.5px solid var(--border2);
+    border-radius: var(--radius);
+    padding: 8px 14px;
+    font-size: 13px;
+    color: var(--text2);
+    cursor: pointer;
+    transition: color 0.1s, background 0.1s;
+    -webkit-tap-highlight-color: transparent;
+    outline: none;
+  }
+
+  .import-modal-buttons button:hover {
+    background: var(--bg2);
+    color: var(--text);
+  }
+
+  .import-modal-buttons button.primary {
+    background: #2a2a50;
+    border-color: #5555aa;
+    color: #aaaaee;
+  }
+
+  .import-modal-buttons button.primary:hover {
+    background: #333360;
+    color: #bbbbff;
+  }
+
+  .import-warning {
+    background: rgba(224, 85, 85, 0.1);
+    border: 0.5px solid rgba(224, 85, 85, 0.3);
+    border-radius: var(--radius);
+    padding: 10px 12px;
+    font-size: 12px;
+    color: #ff9999;
+    line-height: 1.4;
+  }
 </style>
 </head>
 <body>
 
-<h1>Chord Chart Editor</h1>
+<h1 style="display: flex; justify-content: space-between; align-items: center;">
+  Chord Chart Editor
+  <button class="menu-btn" id="menu-btn" title="Menu">
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <line x1="3" y1="6" x2="21" y2="6"/>
+      <line x1="3" y1="12" x2="21" y2="12"/>
+      <line x1="3" y1="18" x2="21" y2="18"/>
+    </svg>
+  </button>
+</h1>
 
 <div class="meta-grid">
   <input id="m-title"     placeholder="Title"     autocomplete="off" autocorrect="off" autocapitalize="words" spellcheck="false" />
@@ -481,6 +616,18 @@
 </div>
 <div class="toast" id="toast"></div>
 <div id="menu-portal"></div>
+
+<div class="import-modal-backdrop" id="import-modal-backdrop">
+  <div class="import-modal">
+    <h2>Import Plain Text Chord Chart</h2>
+    <div id="import-warning"></div>
+    <textarea id="import-textarea" placeholder="Paste your chord chart here..."></textarea>
+    <div class="import-modal-buttons">
+      <button id="import-cancel-btn">Cancel</button>
+      <button class="primary" id="import-submit-btn">Import</button>
+    </div>
+  </div>
+</div>
 
 <script>
 // ── Data model ─────────────────────────────────────────────────────────────
@@ -1448,6 +1595,246 @@ function copyOutput() {
     .then(() => showToast('Copied to clipboard'))
     .catch(() => showToast('Copy failed'));
 }
+
+// ── Import functionality ───────────────────────────────────────────────────
+function hasExistingData() {
+  const title = document.getElementById('m-title').value.trim();
+  const composer = document.getElementById('m-composer').value.trim();
+  const feel = document.getElementById('m-feel').value.trim();
+  const key = document.getElementById('m-key').value.trim();
+  const structure = document.getElementById('m-structure').value.trim();
+  
+  const hasMetaData = title || composer || feel || key || structure;
+  const hasBarData = lines.some(line => line.bars.some(bar => bar.trim() !== ''));
+  
+  return hasMetaData || hasBarData;
+}
+
+function openImportModal() {
+  const backdrop = document.getElementById('import-modal-backdrop');
+  const textarea = document.getElementById('import-textarea');
+  const warning = document.getElementById('import-warning');
+  
+  backdrop.classList.add('active');
+  textarea.value = '';
+  textarea.focus();
+  
+  if (hasExistingData()) {
+    warning.innerHTML = '<strong>Warning:</strong> Importing will replace all existing data.';
+    warning.classList.add('import-warning');
+  } else {
+    warning.innerHTML = '';
+    warning.classList.remove('import-warning');
+  }
+}
+
+function closeImportModal() {
+  const backdrop = document.getElementById('import-modal-backdrop');
+  backdrop.classList.remove('active');
+}
+
+function parseChordChart(text) {
+  const lines_text = text.split('\n');
+  let idx = 0;
+  
+  // Parse header
+  let title = '';
+  let composer = '';
+  let feel = '';
+  let key = '';
+  let structure = '';
+  
+  // Check first line for title (with optional composer)
+  if (idx < lines_text.length && lines_text[idx].trim() !== '' && !lines_text[idx].trim().startsWith('[')) {
+    const firstLine = lines_text[idx].trim();
+    const composerMatch = firstLine.match(/^(.*?)\s*\((.*?)\)\s*$/);
+    if (composerMatch) {
+      title = composerMatch[1].trim();
+      composer = composerMatch[2].trim();
+    } else {
+      title = firstLine;
+    }
+    idx++;
+  }
+  
+  // Check second line for Feel/Key
+  if (idx < lines_text.length && lines_text[idx].trim() !== '' && !lines_text[idx].trim().startsWith('[')) {
+    const secondLine = lines_text[idx].trim();
+    
+    // Extract key using regex: (A-G)(b#)? (major|minor)
+    const keyMatch = secondLine.match(/([A-G]#?b?)\s+(major|minor)/i);
+    if (keyMatch) {
+      key = keyMatch[0];
+      // Remove the key from the line to get feel
+      let remaining = secondLine.replace(keyMatch[0], '').trim();
+      // Remove comma and space if present
+      feel = remaining.replace(/,\s*$/, '').trim();
+    } else {
+      // If no key pattern found, split on comma
+      const parts = secondLine.split(',');
+      feel = parts[0].trim();
+      if (parts.length > 1) {
+        key = parts[1].trim();
+      }
+    }
+    idx++;
+  }
+  
+  // Check third line for Structure
+  if (idx < lines_text.length && lines_text[idx].trim() !== '' && !lines_text[idx].trim().startsWith('[')) {
+    structure = lines_text[idx].trim();
+    idx++;
+  }
+  
+  // Parse bars and sections
+  const newLines = [];
+  let currentTitle = '';
+  
+  while (idx < lines_text.length) {
+    const line = lines_text[idx];
+    idx++;
+    
+    // Check for section header
+    if (line.trim().match(/^\[.*\]$/)) {
+      currentTitle = line.trim().slice(1, -1); // Remove brackets
+      continue;
+    }
+    
+    // Empty line or whitespace-only line
+    if (line.trim() === '') {
+      continue;
+    }
+    
+    // Parse bar line
+    const bars = parseBarLine(line);
+    if (bars.length > 0) {
+      newLines.push({ title: currentTitle, bars: bars });
+      currentTitle = ''; // Only apply title to first line after section header
+    }
+  }
+  
+  // If no bars were found, create at least one empty line
+  if (newLines.length === 0) {
+    newLines.push({ title: '', bars: [''] });
+  }
+  
+  return {
+    title,
+    composer,
+    feel,
+    key,
+    structure,
+    lines: newLines
+  };
+}
+
+function parseBarLine(line) {
+  const bars = [];
+  let currentBar = '';
+  let i = 0;
+  
+  while (i < line.length) {
+    const char = line[i];
+    
+    // Check for repeat symbols
+    if (char === '|' || char === ':') {
+      // Check for special barline markers
+      if (char === ':' && i > 0 && line[i-1] === '|') {
+        // This is :| so we skip it (already handled)
+        i++;
+        continue;
+      }
+      if (char === '|' && i + 1 < line.length && line[i+1] === ':') {
+        // This is |: start of repeat
+        if (currentBar.trim()) {
+          bars.push(currentBar.trim());
+          currentBar = '';
+        }
+        i += 2;
+        continue;
+      }
+      if (char === ':' && i > 0 && line[i-1] === '|') {
+        // This is :| end of repeat
+        if (currentBar.trim()) {
+          bars.push(currentBar.trim());
+          currentBar = '';
+        }
+        i++;
+        continue;
+      }
+      
+      // Regular bar line
+      if (currentBar.trim()) {
+        bars.push(currentBar.trim());
+        currentBar = '';
+      }
+      i++;
+      continue;
+    }
+    
+    // Add character to current bar (up to 8 chars per bar + barline)
+    if (currentBar.length < 8) {
+      currentBar += char;
+    }
+    i++;
+  }
+  
+  // Add final bar if exists
+  if (currentBar.trim()) {
+    bars.push(currentBar.trim());
+  }
+  
+  return bars;
+}
+
+function performImport() {
+  const textarea = document.getElementById('import-textarea');
+  const text = textarea.value.trim();
+  
+  if (!text) {
+    showToast('Please paste a chord chart');
+    return;
+  }
+  
+  try {
+    const parsed = parseChordChart(text);
+    
+    // Clear all existing data
+    document.getElementById('m-title').value = parsed.title;
+    document.getElementById('m-composer').value = parsed.composer;
+    document.getElementById('m-feel').value = parsed.feel;
+    document.getElementById('m-key').value = parsed.key;
+    document.getElementById('m-structure').value = parsed.structure;
+    
+    lines = parsed.lines;
+    
+    closeImportModal();
+    render();
+    showToast('Imported successfully');
+  } catch (err) {
+    console.error('Import error:', err);
+    showToast('Error importing chart');
+  }
+}
+
+// Menu button and modal event listeners
+document.getElementById('menu-btn').addEventListener('click', openImportModal);
+document.getElementById('import-cancel-btn').addEventListener('click', closeImportModal);
+document.getElementById('import-submit-btn').addEventListener('click', performImport);
+
+// Close modal on backdrop click
+document.getElementById('import-modal-backdrop').addEventListener('click', (e) => {
+  if (e.target.id === 'import-modal-backdrop') {
+    closeImportModal();
+  }
+});
+
+// Close on Escape key
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape' && document.getElementById('import-modal-backdrop').classList.contains('active')) {
+    closeImportModal();
+  }
+});
 
 ['m-title','m-composer','m-feel','m-key','m-structure'].forEach(id => {
   document.getElementById(id).addEventListener('input', scheduleOutput);
