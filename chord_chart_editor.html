@@ -614,6 +614,7 @@
     </button>
   </div>
 </div>
+
 <div class="toast" id="toast"></div>
 <div id="menu-portal"></div>
 
@@ -648,46 +649,6 @@ let toastTimer = null;
 const CONVERSIONS = [
   ['maj7','Δ7'], ['m7','m7'], ['h7','ø7'], ['ø7','ø7'], ['dim7','o'],
 ];
-function convertSymbols(s) {
-  let r = s;
-  CONVERSIONS.forEach(([f,t]) => { r = r.split(f).join(t); });
-  return r;
-}
-
-// ── Bar formatting ─────────────────────────────────────────────────────────
-function parseBarInput(raw) {
-  let s = raw.trim();
-  let openBar = '', closeBar = '|';
-  if (s.startsWith('|:')) { openBar = '|:'; s = s.slice(2).trim(); }
-  if (s.endsWith(':|'))   { closeBar = ':|'; s = s.slice(0, -2).trim(); }
-  return { openBar, content: s, closeBar };
-}
-
-function layoutContent(raw, contentWidth) {
-  const s = convertSymbols(raw);
-  if (!s || s === '%') {
-    const side = Math.floor((contentWidth - 1) / 2);
-    return ' '.repeat(side) + '%' + ' '.repeat(contentWidth - side - 1);
-  }
-  const tokens = s.split(/\s+/).filter(Boolean);
-  if (tokens.length === 1) return tokens[0].padEnd(contentWidth);
-  if (tokens.length === 2) {
-    const [c1, c2] = tokens;
-    const pos = Math.max(c1.length + 1, Math.floor(contentWidth / 2));
-    if (pos + c2.length <= contentWidth) return c1.padEnd(pos) + c2.padEnd(contentWidth - pos);
-    return c1 + ' ' + c2;
-  }
-  const joined = tokens.join(' ');
-  return joined.length <= contentWidth ? joined.padEnd(contentWidth) : joined;
-}
-
-function formatBarOutput(raw) {
-  const { openBar, content, closeBar } = parseBarInput(raw);
-  const cw = 9 - openBar.length - closeBar.length;
-  const padded = layoutContent(content, cw);
-  return (openBar === '|:' ? '|:' : '') + padded + closeBar;
-}
-
 // ── Key detection ──────────────────────────────────────────────────────────
 const NOTE_MAP = {
   'C':0,'C#':1,'Db':1,'D':2,'D#':3,'Eb':3,'E':4,'F':5,
@@ -799,29 +760,118 @@ function updateKeyPills() {
 
 // ── Output builder ─────────────────────────────────────────────────────────
 function buildOutput() {
-  const title     = document.getElementById('m-title').value.trim();
-  const composer  = document.getElementById('m-composer').value.trim();
-  const feel      = document.getElementById('m-feel').value.trim();
-  const key       = document.getElementById('m-key').value.trim();
-  const structure = document.getElementById('m-structure').value.trim();
+  const song = buildSong();
+  document.getElementById('output').textContent = renderPlainText(song);
+  updateKeyPills();
+}
 
-  let out = '';
-  const composerPart = composer ? '(' + composer + ')' : '';
-  const titleLine = [title, composerPart].filter(Boolean).join(' ');
-  const feelLine  = [feel, key].filter(Boolean).join(', ');
-  if (titleLine)  out += titleLine  + '\n';
-  if (feelLine)   out += feelLine   + '\n';
-  if (structure)  out += structure  + '\n';
+// ── Song object ─────────────────────────────────────────────────────────────
+function barInputToBarObject(raw) {
+  const { initialString, content, finalString } = extractBarComponents(raw);
 
+  const hasOpen  = initialString === ':';
+  const hasClose = finalString   === ':';
+  let repeat = null;
+  if (hasOpen && hasClose) repeat = 'both';
+  else if (hasOpen)        repeat = 'start';
+  else if (hasClose)       repeat = 'end';
+
+  const nthMatch  = finalString.match(/^\s(\d)$/);
+  const nthEnding = nthMatch ? parseInt(nthMatch[1]) : null;
+
+  const trimmed = content.trim();
+  if (trimmed === '' || trimmed === '%') {
+    return { type: 'simile', repeat, nthEnding };
+  }
+  return { type: 'normal', chords: trimmed.split(/\s+/).filter(Boolean), repeat, nthEnding };
+}
+
+function buildSong() {
+  const song = {
+    title:     document.getElementById('m-title').value.trim(),
+    composer:  document.getElementById('m-composer').value.trim(),
+    style:     document.getElementById('m-feel').value.trim(),
+    key:       document.getElementById('m-key').value.trim(),
+    structure: document.getElementById('m-structure').value.trim(),
+    sections:  []
+  };
+
+  let currentSection = null;
   lines.forEach(line => {
-    if (line.title) {
-      out += '\n[' + line.title + ']\n';
+    if (line.title || currentSection === null) {
+      currentSection = { name: line.title || '', lines: [] };
+      song.sections.push(currentSection);
     }
-    out += formatLineOutput(line.bars) + '\n';
+    const barObjects = line.bars.map(barInputToBarObject);
+
+    // Spacer detection: empty bars before a 2nd-or-higher nth-time ending
+    const firstNonEmptyIdx = barObjects.findIndex(b => b.type !== 'simile');
+    if (firstNonEmptyIdx > 0) {
+      const first = barObjects[firstNonEmptyIdx];
+      if (first.nthEnding !== null && first.nthEnding >= 2) {
+        for (let i = 0; i < firstNonEmptyIdx; i++) barObjects[i].type = 'spacer';
+      }
+    }
+
+    currentSection.lines.push({ bars: barObjects });
   });
 
-  document.getElementById('output').textContent = out.trim();
-  updateKeyPills();
+  return song;
+}
+
+// ── Plain text renderer ─────────────────────────────────────────────────────
+function renderLineFromBarObjects(barObjects) {
+  // Build intermediate representations from bar objects
+  const intermediates = barObjects.map(bar => ({
+    initialString: (bar.repeat === 'start' || bar.repeat === 'both') ? ':' : '',
+    content:       bar.type === 'normal' ? bar.chords.join(' ') : '',
+    finalString:   (bar.repeat === 'end'  || bar.repeat === 'both') ? ':' : '',
+    nthEnding:     bar.nthEnding,
+    isSpacer:      bar.type === 'spacer',
+  }));
+
+  // Move nth-time endings to the right position
+  for (let i = 0; i < intermediates.length; i++) {
+    const nth = intermediates[i].nthEnding;
+    if (nth === null) continue;
+    if (i === 0) {
+      // First bar on line: number becomes part of the initial string
+      intermediates[i].initialString = nth + '|';
+    } else {
+      // Not first bar: number goes as final char of the previous bar slot
+      intermediates[i - 1].finalString = ' ' + nth;
+    }
+    intermediates[i].nthEnding = null;
+  }
+
+  // Render each bar
+  let output = '';
+  for (let i = 0; i < intermediates.length; i++) {
+    const { initialString, content, finalString, isSpacer } = intermediates[i];
+    // Spacer bars with no nth-time finalString use a space separator (not |)
+    const separator = (isSpacer && finalString === '') ? ' ' : '|';
+    output += formatBar(initialString, content, finalString, separator, i === 0, isSpacer);
+  }
+  return output;
+}
+
+function renderPlainText(song) {
+  let out = '';
+  const composerPart = song.composer ? '(' + song.composer + ')' : '';
+  const titleLine = [song.title, composerPart].filter(Boolean).join(' ');
+  const feelLine  = [song.style, song.key].filter(Boolean).join(', ');
+  if (titleLine)    out += titleLine    + '\n';
+  if (feelLine)     out += feelLine     + '\n';
+  if (song.structure) out += song.structure + '\n';
+
+  song.sections.forEach(section => {
+    if (section.name) out += '\n[' + section.name + ']\n';
+    section.lines.forEach(line => {
+      out += renderLineFromBarObjects(line.bars) + '\n';
+    });
+  });
+
+  return out.trim();
 }
 
 // ── Extract bar components ──────────────────────────────────────────────────
@@ -867,64 +917,6 @@ function extractBarComponents(barInput) {
   }
   
   return { initialString, content, finalString };
-}
-
-function formatLineOutput(bars) {
-  let output = '';
-  
-  // First pass: detect nth-time endings and move them to previous bar's final string
-  const processedBars = [];
-  for (let i = 0; i < bars.length; i++) {
-    const components = extractBarComponents(bars[i]);
-    
-    // Check if current bar starts with a digit (nth-time ending)
-    const endingMatch = bars[i].trim().match(/^(\d)\s?/);
-    if (endingMatch && i > 0) {
-      // Move the ending number to the previous bar's final string
-      const prevComponents = processedBars[processedBars.length - 1];
-      prevComponents.finalString = ' ' + endingMatch[1];
-      
-      // Remove the number from current bar content
-      const cleanedContent = bars[i].trim().replace(/^\d\s?/, '');
-      const newComponents = extractBarComponents(cleanedContent);
-      processedBars.push(newComponents);
-    } else if (endingMatch && i === 0) {
-      // First bar with nth-time: will be handled as initial string "2|"
-      const endingNum = endingMatch[1];
-      const cleanedContent = bars[i].trim().replace(/^\d\s?/, '');
-      const newComponents = extractBarComponents(cleanedContent);
-      newComponents.initialString = endingNum + '|';
-      processedBars.push(newComponents);
-    } else {
-      processedBars.push(components);
-    }
-  }
-  
-  // Detect if we're in a run of blank bars before an nth(>1)-time ending
-  const firstNumberedIdx = processedBars.findIndex(bar => {
-    const m = bar.finalString.match(/^\s(\d)$/);
-    return m && parseInt(m[1]) > 1;
-  });
-  
-  for (let i = 0; i < processedBars.length; i++) {
-    const components = processedBars[i];
-    const { initialString, content, finalString } = components;
-    
-    // Determine separator and spacer status
-    let separator = '|';
-    let isSpacer = false;
-    if (firstNumberedIdx !== -1 && i < firstNumberedIdx && content.trim() === '') {
-      separator = ' ';
-      isSpacer = true;
-    }
-    
-    // Format the bar with proper spacing
-    const isFirstBar = i === 0;
-    const barOutput = formatBar(initialString, content, finalString, separator, isFirstBar, isSpacer);
-    output += barOutput;
-  }
-  
-  return output;
 }
 
 function formatBar(initialString, content, finalString, separator, isFirstBar = false, isSpacer = false) {
@@ -1025,69 +1017,6 @@ function layoutChords(content, availableWidth, initialLen) {
   return result.padEnd(availableWidth);
 }
 
-function distributeTwo(tokens, width) {
-  const [c1, c2] = tokens;
-  const c1Len = c1.length;
-  const c2Len = c2.length;
-  
-  // Ideal positions: 0 and 4
-  const idealPos1 = 0;
-  const idealPos2 = 4;
-  
-  // Actual start of first chord
-  const actualPos1 = idealPos1;
-  
-  // Earliest possible start of second chord
-  const earliestPos2 = actualPos1 + c1Len + 1; // +1 for mandatory space
-  
-  // Determine where to place second chord
-  const pos2 = Math.max(idealPos2, earliestPos2);
-  
-  // Check if we have room
-  if (pos2 + c2Len <= width) {
-    let result = c1.padEnd(pos2) + c2;
-    return result.padEnd(width);
-  }
-  
-  // No room: just use 1 space
-  return c1 + ' ' + c2;
-}
-
-function distributeThree(tokens, width) {
-  const [c1, c2, c3] = tokens;
-  const c1Len = c1.length;
-  const c2Len = c2.length;
-  const c3Len = c3.length;
-  
-  // Ideal positions: 0, 3, 6
-  const idealPos1 = 0;
-  const idealPos2 = 3;
-  const idealPos3 = 6;
-  
-  // Actual start of first chord
-  const actualPos1 = idealPos1;
-  
-  // Earliest possible start of second chord
-  let earliestPos2 = actualPos1 + c1Len + 1;
-  
-  // Determine where to place second chord
-  const pos2 = Math.max(idealPos2, earliestPos2);
-  
-  // Earliest possible start of third chord
-  let earliestPos3 = pos2 + c2Len + 1;
-  
-  // Determine where to place third chord
-  const pos3 = Math.max(idealPos3, earliestPos3);
-  
-  // Check if we have room
-  if (pos3 + c3Len <= width) {
-    let result = c1.padEnd(pos2) + c2.padEnd(pos3) + c3;
-    return result.padEnd(width);
-  }
-  
-  // No room: just use 1 space
-  return c1 + ' ' + c2 + ' ' + c3;
-}
 
 
 function scheduleOutput() {
@@ -1222,7 +1151,7 @@ function actionCopy() {
   const keys = orderedSelectedKeys();
   if (!keys.length) return;
   internalClipboard = keys.map(k => getBarValue(k));
-  const text = keys.map(k => formatBarOutput(getBarValue(k))).join('');
+  const text = keys.map(k => renderLineFromBarObjects([barInputToBarObject(getBarValue(k))])).join('');
   navigator.clipboard.writeText(text).catch(() => {});
   selectedBars.clear();
   updateSelectionUI();
@@ -1370,7 +1299,7 @@ function groupIntoSections() {
 // Convert a single bar's raw value to iReal cells string (4 cells, comma-separated)
 // prevBarChords: array of iReal chord strings from previous bar (for % resolution)
 function barToIRealCells(raw, prevChords) {
-  const { openBar, content } = parseBarInput(raw);
+  const { initialString, content } = extractBarComponents(raw);
   const s = content.trim();
 
   // Empty or %: simile
@@ -1533,23 +1462,23 @@ function exportIReal() {
 
     const firstBarRaw = allBars[0];
     const lastBarRaw  = allBars[allBars.length - 1];
-    const { openBar: userFirstOpen } = parseBarInput(firstBarRaw);
-    const { closeBar: userLastClose } = parseBarInput(lastBarRaw);
+    const { initialString: firstOpen } = extractBarComponents(firstBarRaw);
+    const { finalString: lastClose }   = extractBarComponents(lastBarRaw);
 
-    const useOpenRepeat  = (entry.openRepeat)  || userFirstOpen === '|:';
-    const useCloseRepeat = (entry.closeRepeat) || userLastClose === ':|';
+    const useOpenRepeat  = (entry.openRepeat)  || firstOpen === ':';
+    const useCloseRepeat = (entry.closeRepeat) || lastClose === ':';
 
     allBars.forEach((raw, bi) => {
       const isFirstBar = bi === 0;
       const isLastBar  = bi === allBars.length - 1;
-      const { openBar: userOpen, closeBar: userClose } = parseBarInput(raw);
+      const { initialString: userOpen, finalString: userClose } = extractBarComponents(raw);
 
       let openBl = '';
       if (isFirstBar) {
         let bl = useOpenRepeat ? '{' : '[';
         openBl = rehearsalMark + bl;
         isFirstSec = false;
-      } else if (userOpen === '|:') {
+      } else if (userOpen === ':') {
         openBl = '{';
       }
 
@@ -1558,7 +1487,7 @@ function exportIReal() {
         if (useCloseRepeat) closeBl = '}';
         else if (isLastSec) closeBl = 'Z';
         else closeBl = ']';
-      } else if (userClose === ':|') {
+      } else if (userClose === ':') {
         closeBl = '}';
       }
 
@@ -1791,7 +1720,7 @@ function showLineMenu(e, li) {
     ['Add bar', () => { lines[li].bars.push(''); render(); }],
     ['Remove empty bars', () => {
       const filtered = lines[li].bars.filter(b => {
-        const { content } = parseBarInput(b);
+        const { content } = extractBarComponents(b);
         return content !== '' && content !== '%';
       });
       lines[li].bars = filtered.length > 0 ? filtered : [''];
