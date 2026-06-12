@@ -1258,95 +1258,134 @@ function applySL(cells) {
 function toIRealSection(title) {
   if (!title) return '';
   const map = { 'A':'*A','B':'*B','C':'*C','D':'*D','Intro':'*i','Verse':'*V' };
-  return map[title] || ''; // Chorus, Solos etc have no iReal equivalent — omit
+  return map[title] || '';
 }
 
 // Expand structure string into ordered array of section letter keys
 // e.g. "AABA" -> ['A','A','B','A']
 function parseStructure(str) {
   if (!str) return null;
-  // Match sequences of letters or known multi-char names
   const result = [];
-  // Simple: split into individual uppercase letters (works for AABA etc)
   for (const ch of str.toUpperCase()) {
     if (ch >= 'A' && ch <= 'Z') result.push(ch);
   }
   return result.length > 0 ? result : null;
 }
 
-// Group lines into sections: each section starts at a titled line,
-// subsequent untitled lines belong to that section.
-// Returns Array<{ title: string, lineIndices: number[] }>
-function groupIntoSections() {
-  const sections = [];
-  let current = null;
-  lines.forEach((line, li) => {
-    if (line.title) {
-      current = { title: line.title, lineIndices: [li] };
-      sections.push(current);
-    } else {
-      if (current) current.lineIndices.push(li);
-      else {
-        // Untitled lines before any title — put in a nameless section
-        current = { title: '', lineIndices: [li] };
-        sections.push(current);
-      }
-    }
-  });
-  return sections;
+// Cell distribution across bars on a line (must total 16)
+function getCellDistribution(numBars) {
+  const map = {
+    1: [16],
+    2: [8, 8],
+    3: [6, 5, 5],
+    4: [4, 4, 4, 4],
+    5: [4, 3, 3, 3, 3],
+    6: [3, 3, 3, 3, 2, 2],
+    7: [3, 3, 2, 2, 2, 2, 2],
+    8: [2, 2, 2, 2, 2, 2, 2, 2],
+  };
+  return map[numBars] || Array(numBars).fill(2);
 }
 
-// Convert a single bar's raw value to iReal cells string (4 cells, comma-separated)
-// prevBarChords: array of iReal chord strings from previous bar (for % resolution)
-function barToIRealCells(raw, prevChords) {
-  const { initialString, content } = extractBarComponents(raw);
-  const s = content.trim();
+// Render a bar object's cells array for iReal
+function renderBarCells(bar, numCells) {
+  if (bar.type === 'spacer') return Array(numCells).fill(' ');
 
-  // Empty or %: simile
-  if (!s || s === '%') {
-    // Use x token on beat 2
-    return { cells: [' ', 'x', ' ', ' '], chords: prevChords };
+  if (bar.type === 'simile') {
+    const cells = Array(numCells).fill(' ');
+    cells[Math.max(1, Math.floor(numCells / 2)) - 1] = 'x'; // 1-indexed → 0-indexed
+    return cells;
   }
 
-  const tokens = s.split(/\s+/).filter(Boolean).map(toIRealChord);
-  const chords = tokens.filter(Boolean);
+  // Normal bar
+  const chords = bar.chords.map(toIRealChord).filter(Boolean);
+  if (chords.length === 0) return Array(numCells).fill(' ');
 
-  if (chords.length === 0) return { cells: [' ', ' ', ' ', ' '], chords: prevChords };
+  let n = chords.length > numCells ? chords.length : numCells;
+  const cells = Array(n).fill(' ');
+  chords.forEach((chord, idx) => {
+    cells[Math.ceil(1 + idx * (n / chords.length)) - 1] = chord;
+  });
+  return cells;
+}
 
-  let cells = [' ', ' ', ' ', ' '];
-  if (chords.length === 1) {
-    cells = [chords[0], ' ', ' ', ' '];
-  } else if (chords.length === 2) {
-    cells = [chords[0], ' ', chords[1], ' '];
-  } else if (chords.length === 3) {
-    cells = [chords[0], chords[1], chords[2], ' '];
-  } else {
-    cells = [chords[0], chords[1], chords[2], chords[3]];
+// ── Implied repeat detection (iReal export only) ───────────────────────────
+function addImpliedRepeats(song) {
+  // Work on a deep copy — never mutate the live Song object
+  const s = JSON.parse(JSON.stringify(song));
+
+  // Build a flat array of every bar with section context
+  const flat = [];
+  s.sections.forEach((section, sectionIdx) => {
+    section.lines.forEach(line => {
+      line.bars.forEach(bar => {
+        flat.push({ bar, section, sectionIdx });
+      });
+    });
+  });
+
+  // For each nth-time ending bar, find its passage and add implied repeats
+  for (let i = 0; i < flat.length; i++) {
+    const { bar: nthBar, sectionIdx } = flat[i];
+    if (nthBar.nthEnding === null) continue;
+
+    // Walk forward to find the last bar of this ending passage
+    let lastIdx = i;
+    let stoppingCondition = 'end'; // end of song
+
+    for (let j = i + 1; j < flat.length; j++) {
+      const fb = flat[j];
+      if (fb.bar.type === 'spacer') {
+        stoppingCondition = 'spacer';
+        break;
+      }
+      if (fb.bar.nthEnding !== null) {
+        stoppingCondition = 'nthTime';
+        break;
+      }
+      if (fb.sectionIdx !== sectionIdx) {
+        stoppingCondition = 'newSection';
+        break;
+      }
+      lastIdx = j;
+    }
+
+    // Only act on non-final endings (stopped by spacer or another nth-time)
+    if (stoppingCondition !== 'spacer' && stoppingCondition !== 'nthTime') continue;
+
+    const lastBar = flat[lastIdx].bar;
+
+    // If closing repeat already present, trust the user's explicit markup
+    if (lastBar.repeat === 'end' || lastBar.repeat === 'both') continue;
+
+    // Add closing repeat to the last bar of the ending passage
+    lastBar.repeat = lastBar.repeat === 'start' ? 'both' : 'end';
+
+    // Add opening repeat to the first bar of the section (if not already present)
+    const firstFlat = flat.find(fb => fb.sectionIdx === sectionIdx);
+    if (firstFlat) {
+      const firstBar = firstFlat.bar;
+      if (firstBar.repeat !== 'start' && firstBar.repeat !== 'both') {
+        firstBar.repeat = firstBar.repeat === 'end' ? 'both' : 'start';
+      }
+    }
   }
-  return { cells, chords };
+
+  return s;
 }
 
 function exportIReal() {
-  const songTitle  = document.getElementById('m-title').value.trim() || 'Untitled';
-  const composerRaw = document.getElementById('m-composer').value.trim();
-  const feel       = document.getElementById('m-feel').value.trim();
-  const keyRaw     = document.getElementById('m-key').value.trim();
-  const structureRaw = document.getElementById('m-structure').value.trim();
+  const song = addImpliedRepeats(buildSong());
 
-  // Composer: iReal wants "Last First"
-  // We store it as entered — assume user enters "First Last" or just a name
-  // iReal format: Last First. Split on last space.
+  // ── Metadata ──────────────────────────────────────────────────────────────
+  const songTitle = song.title || 'Untitled';
   let composer = 'Unknown';
-  if (composerRaw) {
-    const parts = composerRaw.trim().split(/\s+/);
-    if (parts.length >= 2) {
-      composer = parts[parts.length - 1] + ' ' + parts.slice(0, -1).join(' ');
-    } else {
-      composer = composerRaw;
-    }
+  if (song.composer) {
+    const parts = song.composer.trim().split(/\s+/);
+    composer = parts.length === 2
+      ? parts[1] + ' ' + parts[0]   // First Last → Last First
+      : song.composer.trim();        // 1 or 3+ parts: leave as entered
   }
-
-  // Style: map our feel to iReal style
   const styleMap = {
     'swing': 'Medium Swing', 'med swing': 'Medium Swing', 'medium swing': 'Medium Swing',
     'fast swing': 'Medium Up Swing', 'up swing': 'Medium Up Swing',
@@ -1354,170 +1393,193 @@ function exportIReal() {
     'latin': 'Latin', 'waltz': 'Jazz Waltz', 'jazz waltz': 'Jazz Waltz',
     'bolero': 'Bolero', 'funk': 'Funk', 'blues': 'Medium Swing',
   };
-  const feelKey = feel.toLowerCase();
-  const style = styleMap[feelKey] || feel || 'Medium Swing';
+  const style = styleMap[song.style.toLowerCase()] || song.style || 'Medium Swing';
 
-  // Normalise key to iReal format
-  // Accepts: "E minor", "Em", "E min", "E-", "Bb major", "Bb", "F#m" etc.
   function normaliseKey(raw) {
     if (!raw) return 'C';
     const s = raw.trim();
-    // Already in iReal format?
     if (/^[A-G][b#]?-$/.test(s)) return s;
-    // Check for minor indicator
     const minorMatch = s.match(/^([A-G][b#]?)\s*(minor|min|m|-)\b/i);
     if (minorMatch) return minorMatch[1] + '-';
-    // Major or just a note name
     const majorMatch = s.match(/^([A-G][b#]?)/);
     if (majorMatch) return majorMatch[1];
     return 'C';
   }
-  const key = normaliseKey(keyRaw);
+  const key = normaliseKey(song.key);
 
-  // Build section map
-  const sectionGroups = groupIntoSections();
-  // Map section title -> section group (use first occurrence for each title)
+  // ── Play sequence from structure ──────────────────────────────────────────
   const sectionMap = new Map();
-  const seenTitles = new Map(); // title -> count
-  sectionGroups.forEach(sec => {
-    const t = sec.title;
-    const count = (seenTitles.get(t) || 0);
+  const seenTitles = new Map();
+  song.sections.forEach(sec => {
+    const t = sec.name;
+    const count = seenTitles.get(t) || 0;
     seenTitles.set(t, count + 1);
-    // Key: title_occurrence (so A_0, A_1 etc.)
     sectionMap.set(t + '_' + count, sec);
-    if (!sectionMap.has(t)) sectionMap.set(t, sec); // first occurrence also keyed by title alone
+    if (!sectionMap.has(t)) sectionMap.set(t, sec);
   });
 
-  // Determine ordered sequence of sections
-  // Parse structure field; if absent, use the order of sections as they appear
-  const structureParsed = parseStructure(structureRaw);
-
-  let orderedSectionTitles; // array of title strings in play order
-  let repeatMap = null; // Map<title_idx, {open,close}>
+  const structureParsed = parseStructure(song.structure);
+  let orderedSections; // [{section, openRepeat, closeRepeat}]
 
   if (structureParsed) {
-    // Count unique titles in chart vs structure
-    const chartTitles = [...new Set(sectionGroups.map(s => s.title).filter(Boolean))];
-    const structureTitles = [...new Set(structureParsed)];
-
-    // Detect the abbreviated case: e.g. chart has A,B but structure is AABA
-    // Strategy: if structure has repeated letters but chart only has each once,
-    // we need to add repeat signs to sections that are played >1 consecutive time,
-    // or just expand them inline.
-    // Simple approach: expand structure fully — repeat sections as needed.
-    // For sections that appear multiple times consecutively in structure, add { } repeats.
-
-    // Build the ordered play sequence, collapsing consecutive runs into
-    // single repeat-bracketed entries, expanding non-consecutive repeats inline.
-    // Each entry: { title, openRepeat, closeRepeat }
     const playSequence = [];
     let i = 0;
     while (i < structureParsed.length) {
       const title = structureParsed[i];
       let run = 1;
       while (i + run < structureParsed.length && structureParsed[i + run] === title) run++;
-      if (run >= 2) {
-        playSequence.push({ title, openRepeat: true, closeRepeat: true });
-      } else {
-        playSequence.push({ title, openRepeat: false, closeRepeat: false });
-      }
+      const sec = sectionMap.get(title) || sectionMap.get(title + '_0');
+      if (sec) playSequence.push({ section: sec, openRepeat: run >= 2, closeRepeat: run >= 2 });
       i += run;
     }
-
-    orderedSectionTitles = playSequence;
-
+    orderedSections = playSequence;
   } else {
-    // No structure: just use sections in order, each once, no repeats
-    orderedSectionTitles = sectionGroups.map(s => ({
-      title: s.title || '',
-      openRepeat: false,
-      closeRepeat: false,
-    }));
+    orderedSections = song.sections.map(sec => ({ section: sec, openRepeat: false, closeRepeat: false }));
   }
+  if (!orderedSections.length) return;
 
-  // Build chord block
-  let block = '';
-  let isFirstSec = true;
-  let prevChords = [];
+  // ── Build bar items ────────────────────────────────────────────────────────
+  // Each item: { cells, openStr, closeStr }
+  // Then do a global s/l pass before building the block string.
+  const allBarItems = [];
+  let isFirstBarEver = true;
 
-  // Resolve a title to its section group (always uses first occurrence in chart)
-  function resolveSection(title) {
-    return sectionMap.get(title) || sectionMap.get(title + '_0');
-  }
+  orderedSections.forEach((entry, entryIdx) => {
+    const { section, openRepeat, closeRepeat } = entry;
+    const isLastSection = entryIdx === orderedSections.length - 1;
+    const rehearsalMark = toIRealSection(section.name);
+    const customText = section.name && !rehearsalMark ? `<*69${section.name}>` : '';
 
-  orderedSectionTitles.forEach((entry, secIdx) => {
-    const title = entry.title;
-    const sec = resolveSection(title);
-    if (!sec) return;
+    section.lines.forEach((line, lineIdx) => {
+      const isFirstLineOfSection = lineIdx === 0;
+      const isLastLineOfSection  = lineIdx === section.lines.length - 1;
+      const numBars = line.bars.length;
+      const cellDist = getCellDistribution(numBars);
 
-    // Collect all bars
-    const allBars = [];
-    sec.lineIndices.forEach(li => {
-      lines[li].bars.forEach(raw => allBars.push(raw));
-    });
-    if (!allBars.length) return;
+      line.bars.forEach((bar, barIdx) => {
+        const isFirstBarOfSection = isFirstLineOfSection && barIdx === 0;
+        const isLastBarOfSection  = isLastLineOfSection  && barIdx === numBars - 1;
+        const numCells = cellDist[barIdx];
 
-    const rehearsalMark = toIRealSection(title);
-    const isLastSec = secIdx === orderedSectionTitles.length - 1;
+        // ── Spacer bars ────────────────────────────────────────────────────
+        if (bar.type === 'spacer') {
+          const cells = Array(numCells).fill(' ');
+          const nextBar = barIdx < numBars - 1 ? line.bars[barIdx + 1] : null;
+          const closeBL = (!nextBar || nextBar.type !== 'spacer') ? '|' : '';
+          allBarItems.push({ cells, openStr: '', closeStr: closeBL, isSpacer: true });
+          return;
+        }
 
-    const firstBarRaw = allBars[0];
-    const lastBarRaw  = allBars[allBars.length - 1];
-    const { initialString: firstOpen } = extractBarComponents(firstBarRaw);
-    const { finalString: lastClose }   = extractBarComponents(lastBarRaw);
+        // ── Normal / simile bars ───────────────────────────────────────────
+        const cells = renderBarCells(bar, numCells);
 
-    const useOpenRepeat  = (entry.openRepeat)  || firstOpen === ':';
-    const useCloseRepeat = (entry.closeRepeat) || lastClose === ':';
+        // Opening barline
+        let openBL = '';
+        if (isFirstBarOfSection) {
+          openBL = (openRepeat || bar.repeat === 'start' || bar.repeat === 'both') ? '{' : '[';
+        } else if (bar.repeat === 'start' || bar.repeat === 'both') {
+          openBL = '{';
+        }
 
-    allBars.forEach((raw, bi) => {
-      const isFirstBar = bi === 0;
-      const isLastBar  = bi === allBars.length - 1;
-      const { initialString: userOpen, finalString: userClose } = extractBarComponents(raw);
+        // Closing barline
+        let closeBL = '|';
+        if (isLastBarOfSection) {
+          if (closeRepeat || bar.repeat === 'end' || bar.repeat === 'both') closeBL = '}';
+          else if (isLastSection) closeBL = 'Z';
+          else closeBL = ']';
+        } else if (bar.repeat === 'end' || bar.repeat === 'both') {
+          closeBL = '}';
+        }
 
-      let openBl = '';
-      if (isFirstBar) {
-        let bl = useOpenRepeat ? '{' : '[';
-        openBl = rehearsalMark + bl;
-        isFirstSec = false;
-      } else if (userOpen === ':') {
-        openBl = '{';
-      }
+        // Build opening string:
+        // [rehearsalMark] [openBL] [T44 if first] [customText] [Nth marker] ...cells
+        let openStr = '';
+        if (isFirstBarOfSection) openStr += rehearsalMark;
+        openStr += openBL;
+        if (isFirstBarEver) { openStr += 'T44'; isFirstBarEver = false; }
+        if (isFirstBarOfSection && customText) openStr += customText;
+        if (bar.nthEnding !== null) openStr += 'N' + bar.nthEnding;
 
-      let closeBl = '|';
-      if (isLastBar) {
-        if (useCloseRepeat) closeBl = '}';
-        else if (isLastSec) closeBl = 'Z';
-        else closeBl = ']';
-      } else if (userClose === ':') {
-        closeBl = '}';
-      }
-
-      const { cells, chords: newChords } = barToIRealCells(raw, prevChords);
-      if (newChords.length > 0) prevChords = newChords;
-
-      // Apply s/l tokens to cells
-      const styledCells = applySL([...cells]);
-      block += openBl + styledCells.join(',') + closeBl;
+        allBarItems.push({ cells, openStr, closeStr: closeBL, isSpacer: false });
+      });
     });
   });
 
-  // Build URL — field delimiters and chord block must NOT be percent-encoded
-  // Only encode the human-readable fields (title, composer, style, key)
-  function esc(s) { return encodeURIComponent(s).replace(/%23/g,'#').replace(/%2F/g,'/'); }
-  const url = 'irealbook://' +
-    esc(songTitle) + '=' +
-    esc(composer)  + '=' +
-    esc(style)     + '=' +
-    esc(key)       + '=n=' +
-    block;
+  // ── Global s/l pass ────────────────────────────────────────────────────────
+  // Build flat cell records: include isLastInBar for "immediately before barline" check
+  const flatCells = [];
+  allBarItems.forEach((item, itemIdx) => {
+    item.cells.forEach((cell, cellIdx) => {
+      flatCells.push({
+        itemIdx,
+        cellIdx,
+        content: cell,
+        isLastInBar: cellIdx === item.cells.length - 1,
+        isSpacer: item.isSpacer,
+      });
+    });
+  });
+
+  const isChordCell = c => c !== ' ' && c !== 'x' && c !== 'r' && c !== 'n';
+
+  let inRun = false;
+  for (let i = 0; i < flatCells.length; i++) {
+    const fc = flatCells[i];
+    if (fc.isSpacer || !isChordCell(fc.content)) continue;
+
+    const next = flatCells[i + 1];
+    const nextIsChord = next && !next.isSpacer && isChordCell(next.content);
+    const cramped = nextIsChord || fc.isLastInBar;
+
+    if (cramped && !inRun) {
+      fc.content = 's' + fc.content;
+      inRun = true;
+    } else if (!cramped && inRun) {
+      fc.content = 'l' + fc.content;
+      inRun = false;
+    }
+  }
+
+  // Write s/l-annotated content back
+  flatCells.forEach(fc => {
+    allBarItems[fc.itemIdx].cells[fc.cellIdx] = fc.content;
+  });
+
+  // ── Build block string ─────────────────────────────────────────────────────
+  let block = '';
+  allBarItems.forEach(({ cells, openStr, closeStr }) => {
+    block += openStr + cells.join(',') + closeStr;
+  });
+
+  // ── Build and open URL ────────────────────────────────────────────────────
+  const clean = s => s.replace(/[\r\n]/g, '');
+  const rawUrl = 'irealbook://' +
+    clean(songTitle) + '=' +
+    clean(composer)  + '=' +
+    clean(style)     + '=' +
+    clean(key)       + '=n=' +
+    clean(block);
+
+  // encodeURIComponent encodes everything unsafe ([]{|}^#<> etc.)
+  // Then restore characters that must stay literal for iReal to parse:
+  //   =  field delimiters
+  //   ,  cell separators in chord block
+  //   /  slash chords (C/G) and scheme separator (//)
+  //   :  scheme colon (irealbook:)
+  const url = encodeURIComponent(rawUrl)
+    .replace(/%3D/gi, '=')
+    .replace(/%2C/gi, ',')
+    .replace(/%2F/gi, '/')
+    .replace(/%3A/gi, ':');
 
   console.log('iReal URL:', url);
-  // Open via anchor click — location.href rejects custom schemes in most browsers
   const a = document.createElement('a');
   a.href = url;
   a.style.display = 'none';
   document.body.appendChild(a);
   a.click();
   document.body.removeChild(a);
+
   showToast('Opening in iReal Pro…');
 }
 
@@ -2077,6 +2139,14 @@ keyInput.addEventListener('blur',  () => setTimeout(updateKeyPills, 50));
 keyInput.addEventListener('input', () => updateKeyPills());
 
 render();
+
+// Pre-populate fields from URL query parameters (e.g. ?title=Moonglow)
+const urlParams = new URLSearchParams(window.location.search);
+const paramTitle = urlParams.get('title');
+if (paramTitle) {
+  document.getElementById('m-title').value = paramTitle;
+  scheduleOutput();
+}
 </script>
 </body>
 </html>
