@@ -48,6 +48,12 @@
     gap: 5px;
     margin-bottom: 10px;
   }
+  .meta-grid .row-3 {
+    grid-column: 1 / -1;
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 5px;
+  }
   .meta-grid input {
     background: var(--bg2);
     border: 0.5px solid var(--border);
@@ -575,10 +581,13 @@
 <div class="meta-grid">
   <input id="m-title"     placeholder="Title"     autocomplete="off" autocorrect="off" autocapitalize="words" spellcheck="false" />
   <input id="m-composer"  placeholder="Composer"  autocomplete="off" autocorrect="off" autocapitalize="words" spellcheck="false" />
-  <input id="m-feel"      placeholder="Feel"      autocomplete="off" autocorrect="off" autocapitalize="words" spellcheck="false" />
-  <div style="position:relative;min-width:0;">
-    <input id="m-key" placeholder="Key" autocomplete="off" autocorrect="off" autocapitalize="words" spellcheck="false" style="width:100%;padding-right:70px" />
-    <div id="key-pills-row" style="position:absolute;right:6px;top:50%;transform:translateY(-50%);display:flex;gap:4px;pointer-events:auto;"></div>
+  <div class="row-3">
+    <input id="m-feel"    placeholder="Feel"      autocomplete="off" autocorrect="off" autocapitalize="words" spellcheck="false" />
+    <div style="position:relative;min-width:0;">
+      <input id="m-key" placeholder="Key" autocomplete="off" autocorrect="off" autocapitalize="words" spellcheck="false" style="width:100%;padding-right:70px" />
+      <div id="key-pills-row" style="position:absolute;right:6px;top:50%;transform:translateY(-50%);display:flex;gap:4px;pointer-events:auto;"></div>
+    </div>
+    <input id="m-timesig" placeholder="Time sig" autocomplete="off" autocorrect="off" autocapitalize="none" spellcheck="false" />
   </div>
   <input id="m-structure" placeholder="Structure" autocomplete="off" autocorrect="off" autocapitalize="characters" spellcheck="false" style="grid-column:1/-1" />
 </div>
@@ -792,6 +801,7 @@ function buildSong() {
     composer:  document.getElementById('m-composer').value.trim(),
     style:     document.getElementById('m-feel').value.trim(),
     key:       document.getElementById('m-key').value.trim(),
+    timeSig:   document.getElementById('m-timesig').value.trim(),
     structure: document.getElementById('m-structure').value.trim(),
     sections:  []
   };
@@ -859,7 +869,7 @@ function renderPlainText(song) {
   let out = '';
   const composerPart = song.composer ? '(' + song.composer + ')' : '';
   const titleLine = [song.title, composerPart].filter(Boolean).join(' ');
-  const feelLine  = [song.style, song.key].filter(Boolean).join(', ');
+  const feelLine  = [song.style, song.key, song.timeSig].filter(Boolean).join(', ');
   if (titleLine)    out += titleLine    + '\n';
   if (feelLine)     out += feelLine     + '\n';
   if (song.structure) out += song.structure + '\n';
@@ -1492,11 +1502,22 @@ function exportIReal() {
         }
 
         // Build opening string:
+  // Map time signature to iReal token (default T44)
+  function toIRealTimeSig(ts) {
+    const map = {
+      '4/4': 'T44', '3/4': 'T34', '5/4': 'T54', '6/4': 'T64', '7/4': 'T74',
+      '2/2': 'T22', '3/2': 'T32', '5/8': 'T58', '6/8': 'T68', '7/8': 'T78',
+      '9/8': 'T98', '12/8': 'T12',
+    };
+    return map[ts] || 'T44';
+  }
+  const timeSigToken = toIRealTimeSig(song.timeSig);
+
         // [rehearsalMark] [openBL] [T44 if first] [customText] [Nth marker] ...cells
         let openStr = '';
         if (isFirstBarOfSection) openStr += rehearsalMark;
         openStr += openBL;
-        if (isFirstBarEver) { openStr += 'T44'; isFirstBarEver = false; }
+        if (isFirstBarEver) { openStr += timeSigToken; isFirstBarEver = false; }
         if (isFirstBarOfSection && customText) openStr += customText;
         if (bar.nthEnding !== null) openStr += 'N' + bar.nthEnding;
 
@@ -1854,13 +1875,14 @@ function copyOutput() {
 
 // ── Import functionality ───────────────────────────────────────────────────
 function hasExistingData() {
-  const title = document.getElementById('m-title').value.trim();
-  const composer = document.getElementById('m-composer').value.trim();
-  const feel = document.getElementById('m-feel').value.trim();
-  const key = document.getElementById('m-key').value.trim();
+  const title     = document.getElementById('m-title').value.trim();
+  const composer  = document.getElementById('m-composer').value.trim();
+  const feel      = document.getElementById('m-feel').value.trim();
+  const key       = document.getElementById('m-key').value.trim();
+  const timeSig   = document.getElementById('m-timesig').value.trim();
   const structure = document.getElementById('m-structure').value.trim();
   
-  const hasMetaData = title || composer || feel || key || structure;
+  const hasMetaData = title || composer || feel || key || timeSig || structure;
   const hasBarData = lines.some(line => line.bars.some(bar => bar.trim() !== ''));
   
   return hasMetaData || hasBarData;
@@ -1913,26 +1935,29 @@ function parseChordChart(text) {
     idx++;
   }
   
-  // Check second line for Feel/Key
+  let timeSig = '';
+
+  // Check second line for Feel/Key/TimeSig
   if (idx < lines_text.length && lines_text[idx].trim() !== '' && !lines_text[idx].trim().startsWith('[')) {
     const secondLine = lines_text[idx].trim();
-    
-    // Extract key using regex: (A-G)(b#)? (major|minor)
-    const keyMatch = secondLine.match(/([A-G]#?b?)\s+(major|minor)/i);
+
+    // Extract time signature e.g. 4/4, 3/4, 6/8
+    const timeSigMatch = secondLine.match(/\b(\d+\/\d+)\b/);
+    let remaining = secondLine;
+    if (timeSigMatch) {
+      timeSig = timeSigMatch[1];
+      remaining = remaining.replace(timeSigMatch[0], '').trim();
+    }
+
+    // Extract key: (A-G)(b#)? (major|minor)
+    const keyMatch = remaining.match(/([A-G]#?b?)\s+(major|minor)/i);
     if (keyMatch) {
       key = keyMatch[0];
-      // Remove the key from the line to get feel
-      let remaining = secondLine.replace(keyMatch[0], '').trim();
-      // Remove comma and space if present
-      feel = remaining.replace(/,\s*$/, '').trim();
-    } else {
-      // If no key pattern found, split on comma
-      const parts = secondLine.split(',');
-      feel = parts[0].trim();
-      if (parts.length > 1) {
-        key = parts[1].trim();
-      }
+      remaining = remaining.replace(keyMatch[0], '').trim();
     }
+
+    // Whatever's left — strip stray commas (leading, trailing, consecutive) and spaces
+    feel = remaining.replace(/,\s*,+/g, ',').replace(/^[\s,]+|[\s,]+$/g, '').trim();
     idx++;
   }
   
@@ -1979,6 +2004,7 @@ function parseChordChart(text) {
     composer,
     feel,
     key,
+    timeSig,
     structure,
     lines: newLines
   };
@@ -2096,6 +2122,7 @@ function performImport() {
     document.getElementById('m-composer').value = parsed.composer;
     document.getElementById('m-feel').value = parsed.feel;
     document.getElementById('m-key').value = parsed.key;
+    document.getElementById('m-timesig').value = parsed.timeSig;
     document.getElementById('m-structure').value = parsed.structure;
     
     lines = parsed.lines;
@@ -2128,7 +2155,7 @@ document.addEventListener('keydown', (e) => {
   }
 });
 
-['m-title','m-composer','m-feel','m-key','m-structure'].forEach(id => {
+['m-title','m-composer','m-feel','m-key','m-timesig','m-structure'].forEach(id => {
   document.getElementById(id).addEventListener('input', scheduleOutput);
 });
 
