@@ -143,12 +143,12 @@
 
   .paint-roller-btn {
     background: none;
-    border: 0.5px solid var(--border2);
+    border: 0.5px solid var(--border);
     border-radius: var(--radius);
     padding: 5px;
     cursor: pointer;
-    color: var(--text2);
-    display: none;
+    color: var(--text3);
+    display: flex;
     align-items: center;
     justify-content: center;
     line-height: 1;
@@ -157,8 +157,31 @@
     outline: none;
     flex-shrink: 0;
   }
-  .paint-roller-btn:hover { color: var(--text); border-color: var(--border2); }
-  .paint-roller-btn.loaded { background: #2a2a40; border-color: #5555aa; color: #aaaaee; }
+  .paint-roller-btn:hover { color: var(--text2); border-color: var(--border2); }
+  .paint-roller-btn.pr-active { background: #2a2a40; border-color: #5555aa; color: #aaaaee; }
+
+  /* Floating paint roller message */
+  .pr-message {
+    display: none;
+    position: fixed;
+    bottom: 20px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: #2a2a40;
+    border: 0.5px solid #5555aa;
+    border-radius: var(--radius);
+    padding: 9px 16px;
+    font-size: 13px;
+    color: #aaaaee;
+    font-family: var(--sans);
+    z-index: 500;
+    white-space: nowrap;
+    pointer-events: none;
+  }
+  .pr-message.visible { display: block; }
+
+  body.pr-mode .bar-input { cursor: crosshair; caret-color: transparent; touch-action: none; }
+  body.pr-mode .bar-input::selection { background: transparent; }
 
   /* Lines area */
   .lines-area {
@@ -669,6 +692,7 @@
 
 <div class="lines-area" id="lines-area"></div>
 <button class="add-line-btn" id="add-line-btn" onclick="addLine()">+ add line</button>
+<div class="pr-message" id="pr-message"></div>
 
 <div class="output-section">
   <div class="output-label">Output</div>
@@ -1107,35 +1131,112 @@ function nextAvailableTitle() {
   return '';
 }
 
-// ── Select mode ────────────────────────────────────────────────────────────
-let selectMode = false;
-let selectedBars = new Set();
+// ── Select & Paint Roller mode ─────────────────────────────────────────────
+let selectMode    = false;
+let prMode        = false; // paint roller mode (mutually exclusive with selectMode)
+let prCopyMode    = false; // PR sub-state: selecting source bars
+let prPasteMode   = false; // PR sub-state: selecting destination bars
+let selectedBars  = new Set();
 let isDragSelecting = false;
 let dragSelectOriginKey = null;
-let preDragSelection = new Set();   // snapshot of selection before drag
+let preDragSelection = new Set();
 let preDragOriginWasSelected = false;
-let pasteMode = false;
+let pendingPasteDestination = false;
+let pasteMode = false; // used by select-mode paste workflow only
 
 function barKey(li, bi) { return li + ':' + bi; }
 
+// ── PR mode helpers ────────────────────────────────────────────────────────
+function setPRMessage(text) {
+  const el = document.getElementById('pr-message');
+  if (text) { el.textContent = text; el.classList.add('visible'); }
+  else       { el.classList.remove('visible'); }
+}
+
+function enterPRCopyMode() {
+  if (selectMode) exitSelectMode();
+  prMode      = true;
+  prCopyMode  = true;
+  prPasteMode = false;
+  pasteMode   = false;
+  pendingPasteDestination = false;
+  selectedBars.clear();
+  document.body.classList.add('pr-mode');
+  if (document.activeElement && document.activeElement.tagName === 'INPUT') document.activeElement.blur();
+  render();
+  updateSelectionUI();
+  setPRMessage('Select bars to copy');
+}
+
+function enterPRPasteMode() {
+  prCopyMode  = false;
+  prPasteMode = true;
+  pendingPasteDestination = true;
+  selectedBars.clear();
+  updateSelectionUI();
+  setPRMessage('Selection copied. Select bars to paste to');
+}
+
+function exitPRMode() {
+  prMode = prCopyMode = prPasteMode = false;
+  pendingPasteDestination = false;
+  isDragSelecting = false;
+  dragSelectOriginKey = null;
+  selectedBars.clear();
+  document.body.classList.remove('pr-mode');
+  render();
+  updateSelectionUI();
+  setPRMessage('');
+}
+
+function onPaintRollerClick() {
+  if (prMode) {
+    // Cancel PR mode entirely
+    exitPRMode();
+    return;
+  }
+
+  if (selectMode && selectedBars.size > 0) {
+    // Workflow 3: bars already selected — copy FIRST, then exit select, enter PR paste
+    internalClipboard = orderedSelectedKeys().map(k => getBarValue(k));
+    exitSelectMode(); // clears selectedBars — clipboard already saved above
+    prMode = true;
+    document.body.classList.add('pr-mode');
+    render();
+    enterPRPasteMode();
+    return;
+  }
+
+  // Workflows 1 & 2: enter PR copy mode
+  enterPRCopyMode();
+}
+
+// ── Select mode ────────────────────────────────────────────────────────────
 function enterSelectMode() {
-  selectMode = true;
-  pasteMode = false;
+  if (prMode) {
+    // Cancel PR without calling render() — we'll render below
+    prMode = prCopyMode = prPasteMode = false;
+    pendingPasteDestination = false;
+    isDragSelecting = false;
+    dragSelectOriginKey = null;
+    document.body.classList.remove('pr-mode');
+    setPRMessage('');
+  }
+  selectMode  = true;
+  pasteMode   = false;
   pendingPasteDestination = false;
   selectedBars.clear();
   document.getElementById('select-btn').style.display = 'none';
   document.getElementById('select-active-btn').style.display = 'flex';
   document.body.classList.add('select-mode');
-  if (document.activeElement && document.activeElement.tagName === 'INPUT') {
-    document.activeElement.blur();
-  }
+  if (document.activeElement && document.activeElement.tagName === 'INPUT') document.activeElement.blur();
   render();
   updateSelectionUI();
 }
 
 function exitSelectMode() {
-  selectMode = false;
-  pasteMode = false;
+  selectMode  = false;
+  pasteMode   = false;
   pendingPasteDestination = false;
   selectedBars.clear();
   isDragSelecting = false;
@@ -1152,8 +1253,9 @@ function toggleSelectMode() {
 }
 
 function updateSelectionUI() {
+  const inPRorSelect = selectMode || prMode;
   document.querySelectorAll('.bar-input').forEach(inp => {
-    inp.classList.toggle('bar-selected', selectedBars.has(inp.dataset.barKey));
+    inp.classList.toggle('bar-selected', inPRorSelect && selectedBars.has(inp.dataset.barKey));
   });
   const count = selectedBars.size;
   document.getElementById('select-count').textContent = count;
@@ -1162,22 +1264,47 @@ function updateSelectionUI() {
   const outlineIcon = document.getElementById('roller-icon-outline');
   const filledIcon  = document.getElementById('roller-icon-filled');
 
-  // Roller: visible when bars selected OR in paste mode
-  const rollerVisible = count > 0 || pasteMode;
-  rollerBtn.style.display = rollerVisible ? 'flex' : 'none';
-  rollerBtn.classList.toggle('loaded', pasteMode);
-  outlineIcon.style.display = pasteMode ? 'none' : '';
-  filledIcon.style.display  = pasteMode ? '' : 'none';
+  // Roller always visible; highlight when PR active; filled icon in paste sub-state
+  rollerBtn.classList.toggle('pr-active', prMode);
+  outlineIcon.style.display = prPasteMode ? 'none' : '';
+  filledIcon.style.display  = prPasteMode ? '' : 'none';
 }
 
 function onBarPointerDown(e, li, bi) {
-  if (!selectMode) return;
+  if (!selectMode && !prMode) return;
   e.preventDefault();
   e.stopPropagation();
   const k = barKey(li, bi);
 
+  // ── Paint Roller mode ──────────────────────────────────────────────────
+  if (prMode) {
+    if (prPasteMode) {
+      // Destination drag — already in pendingPasteDestination
+      selectedBars.clear();
+      selectedBars.add(k);
+      isDragSelecting = true;
+      dragSelectOriginKey = k;
+      preDragSelection = new Set();
+      preDragOriginWasSelected = false;
+      updateSelectionUI();
+      if (e.pointerId !== undefined) { try { e.target.setPointerCapture(e.pointerId); } catch(_) {} }
+      return;
+    }
+    if (prCopyMode) {
+      // Source selection drag
+      preDragSelection = new Set(selectedBars);
+      preDragOriginWasSelected = selectedBars.has(k);
+      isDragSelecting = true;
+      dragSelectOriginKey = k;
+      if (preDragOriginWasSelected) selectedBars.delete(k); else selectedBars.add(k);
+      updateSelectionUI();
+      if (e.pointerId !== undefined) { try { e.target.setPointerCapture(e.pointerId); } catch(_) {} }
+      return;
+    }
+  }
+
+  // ── Select mode ────────────────────────────────────────────────────────
   if (pasteMode) {
-    // Entering destination selection — set pending flag but keep pasteMode true until paste executes
     pendingPasteDestination = true;
     preDragSelection = new Set();
     preDragOriginWasSelected = false;
@@ -1190,13 +1317,10 @@ function onBarPointerDown(e, li, bi) {
     return;
   }
 
-  // Normal select: snapshot pre-drag state
   preDragSelection = new Set(selectedBars);
   preDragOriginWasSelected = selectedBars.has(k);
   isDragSelecting = true;
   dragSelectOriginKey = k;
-
-  // Toggle origin bar immediately
   if (preDragOriginWasSelected) selectedBars.delete(k); else selectedBars.add(k);
   updateSelectionUI();
   if (e.pointerId !== undefined) { try { e.target.setPointerCapture(e.pointerId); } catch(_) {} }
@@ -1218,8 +1342,6 @@ function onGlobalPointerUp() {
   }
 }
 
-let pendingPasteDestination = false;
-
 function onGlobalPointerUp() {
   if (isDragSelecting) {
     isDragSelecting = false;
@@ -1229,40 +1351,58 @@ function onGlobalPointerUp() {
 
 document.addEventListener('pointerup', e => {
   if (!isDragSelecting) return;
-  if (pendingPasteDestination) {
-    // Ensure origin bar is selected if nothing else is
-    if (selectedBars.size === 0 && dragSelectOriginKey) {
-      selectedBars.add(dragSelectOriginKey);
+
+  if (prMode && prCopyMode) {
+    // Finished selecting source bars → copy and enter paste mode
+    isDragSelecting = false;
+    dragSelectOriginKey = null;
+    if (selectedBars.size > 0) {
+      internalClipboard = orderedSelectedKeys().map(k => getBarValue(k));
+      enterPRPasteMode();
     }
+    return;
+  }
+
+  if (prMode && prPasteMode && pendingPasteDestination) {
+    // Finished selecting destination → paste
+    if (selectedBars.size === 0 && dragSelectOriginKey) selectedBars.add(dragSelectOriginKey);
+    pendingPasteDestination = false;
+    isDragSelecting = false;
+    dragSelectOriginKey = null;
+    executePRPaste();
+    return;
+  }
+
+  if (pendingPasteDestination) {
+    // Select-mode paste destination
+    if (selectedBars.size === 0 && dragSelectOriginKey) selectedBars.add(dragSelectOriginKey);
     pendingPasteDestination = false;
     isDragSelecting = false;
     dragSelectOriginKey = null;
     executePaste();
-  } else {
-    onGlobalPointerUp();
+    return;
   }
+
+  onGlobalPointerUp();
 });
 document.addEventListener('pointercancel', onGlobalPointerUp);
+
 document.addEventListener('pointermove', e => {
-  if (!selectMode || !isDragSelecting) return;
+  if ((!selectMode && !prMode) || !isDragSelecting) return;
   const el = document.elementFromPoint(e.clientX, e.clientY);
   if (!el || !el.classList.contains('bar-input') || !el.dataset.barKey) return;
   const curKey = el.dataset.barKey;
-
   const allKeys = allBarKeys();
   const originIdx = allKeys.indexOf(dragSelectOriginKey);
   const curIdx    = allKeys.indexOf(curKey);
   if (originIdx === -1 || curIdx === -1) return;
-
   const lo = Math.min(originIdx, curIdx);
   const hi = Math.max(originIdx, curIdx);
 
-  if (pendingPasteDestination) {
-    // Paste destination: always select the range
+  if (pendingPasteDestination || prPasteMode) {
     selectedBars.clear();
     for (let i = lo; i <= hi; i++) selectedBars.add(allKeys[i]);
   } else {
-    // Normal select: start from pre-drag snapshot, apply toggle to range
     selectedBars = new Set(preDragSelection);
     for (let i = lo; i <= hi; i++) {
       const k = allKeys[i];
@@ -1315,22 +1455,17 @@ function setBarValue(k, val) {
 
 let internalClipboard = [];
 
-function onPaintRollerClick() {
-  if (pasteMode) {
-    // Cancel paste mode, return to empty select mode
-    pasteMode = false;
-    selectedBars.clear();
-    updateSelectionUI();
-    return;
-  }
-  // Copy selected bars and enter paste mode
+function executePRPaste() {
   const keys = orderedSelectedKeys();
-  if (!keys.length) return;
-  internalClipboard = keys.map(k => getBarValue(k));
-  selectedBars.clear();
-  pasteMode = true;
-  pendingPasteDestination = false;
-  updateSelectionUI();
+  if (keys.length && internalClipboard.length) {
+    keys.forEach((k, i) => setBarValue(k, internalClipboard[i % internalClipboard.length]));
+    const count = keys.length;
+    exitPRMode();
+    scheduleOutput();
+    showToast('Pasted into ' + count + ' bar' + (count > 1 ? 's' : ''));
+  } else {
+    exitPRMode();
+  }
 }
 
 function executePaste() {
@@ -1884,7 +2019,7 @@ function render() {
       inp.setAttribute('autocorrect', 'off');
       inp.setAttribute('autocapitalize', 'words');
       inp.setAttribute('spellcheck', 'false');
-      if (selectMode) {
+      if (selectMode || prMode) {
         inp.setAttribute('readonly', 'true');
         inp.classList.toggle('bar-selected', selectedBars.has(barKey(li, bi)));
         inp.addEventListener('pointerdown', e => onBarPointerDown(e, li, bi));
