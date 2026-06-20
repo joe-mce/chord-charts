@@ -376,7 +376,7 @@
     background: var(--bg2);
     border: 0.5px solid var(--border);
     border-radius: var(--radius);
-    padding: 14px 80px 14px 14px;
+    padding: 14px 14px 14px 14px;
   }
   .output-pre {
     font-family: var(--mono);
@@ -409,7 +409,6 @@
   .output-menu-btn {
     position: absolute;
     top: 10px;
-    right: 46px;
     background: none;
     border: 0.5px solid var(--border);
     border-radius: var(--radius);
@@ -422,6 +421,8 @@
     transition: color 0.1s;
     -webkit-tap-highlight-color: transparent;
   }
+  #output-menu-btn  { right: 46px; }
+  #expand-toggle-btn { right: 82px; }
   .output-menu-btn:hover { color: var(--text); border-color: var(--border2); }
   .output-menu-btn.active { background: #2a2a40; border-color: #5555aa; color: #aaaaee; }
 
@@ -861,7 +862,7 @@ function updateKeyPills() {
 }
 
 // ── Output builder ─────────────────────────────────────────────────────────
-let expandedOutputOn = true; // default on for testing
+let expandedOutputOn = false; // default off
 
 function buildOutput() {
   const song = buildSong();
