@@ -423,6 +423,7 @@
     -webkit-tap-highlight-color: transparent;
   }
   .output-menu-btn:hover { color: var(--text); border-color: var(--border2); }
+  .output-menu-btn.active { background: #2a2a40; border-color: #5555aa; color: #aaaaee; }
 
   /* Key suggestion pills — sit inside the key input on the RHS */
   .key-pill {
@@ -698,6 +699,12 @@
   <div class="output-label">Output</div>
   <div class="output-wrap">
     <pre class="output-pre" id="output"></pre>
+    <button class="output-menu-btn" id="expand-toggle-btn" onclick="toggleExpandedOutput()" title="Expand structure">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <polyline points="7 4 3 4 3 20 7 20"/><polyline points="17 4 21 4 21 20 17 20"/>
+        <line x1="3" y1="12" x2="21" y2="12"/>
+      </svg>
+    </button>
     <button class="output-menu-btn" id="output-menu-btn" onclick="showOutputMenu(event)" title="More options">
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="5" cy="12" r="1.5" fill="currentColor"/><circle cx="12" cy="12" r="1.5" fill="currentColor"/><circle cx="19" cy="12" r="1.5" fill="currentColor"/></svg>
     </button>
@@ -854,9 +861,13 @@ function updateKeyPills() {
 }
 
 // ── Output builder ─────────────────────────────────────────────────────────
+let expandedOutputOn = true; // default on for testing
+
 function buildOutput() {
   const song = buildSong();
-  document.getElementById('output').textContent = renderPlainText(song);
+  const displaySong = expandedOutputOn ? expandStructure(song) : song;
+  document.getElementById('output').textContent = renderPlainText(displaySong);
+  document.getElementById('expand-toggle-btn').classList.toggle('active', expandedOutputOn);
   updateKeyPills();
 }
 
@@ -1660,7 +1671,344 @@ function renderBarCells(bar, numCells) {
   return cells;
 }
 
-// ── Implied repeat detection (iReal export only) ───────────────────────────
+// ── Structure expansion ─────────────────────────────────────────────────────
+
+function extractCompactStructure(structureStr, sections) {
+  if (!structureStr) return null;
+  const sectionNames = new Set(sections.map(s => s.name).filter(Boolean));
+  const tokens = structureStr.split(/\s+/);
+  for (const token of tokens) {
+    if (!token) continue;
+    // Every character must be uppercase and match a section name
+    const chars = token.split('');
+    if (chars.every(c => c === c.toUpperCase() && c >= 'A' && c <= 'Z' && sectionNames.has(c))) {
+      return chars;
+    }
+  }
+  return null;
+}
+
+function groupIntoRuns(letters) {
+  const runs = [];
+  for (const letter of letters) {
+    if (runs.length && runs[runs.length - 1].letter === letter) {
+      runs[runs.length - 1].count++;
+    } else {
+      runs.push({ letter, count: 1 });
+    }
+  }
+  return runs;
+}
+
+// Deep clone a bar object
+function cloneBar(bar) { return JSON.parse(JSON.stringify(bar)); }
+
+// Parse a section into shared lines + nth-time ending info
+// Returns:
+// {
+//   sharedLines: [line, ...],           // lines before the nth-time ending line
+//   nthLinePrefix: [bar, ...],          // bars on the nth-time line before the first nth marker
+//   endings: [{ nthEnding, bars }],     // one entry per ending passage (no spacers, no nthEnding on bars)
+// }
+function parseNthEndings(section) {
+  const allLines = section.lines;
+
+  // Find which line contains the first nth-time ending bar
+  let nthLineIdx = -1;
+  let nthBarIdx  = -1;
+  outer: for (let li = 0; li < allLines.length; li++) {
+    for (let bi = 0; bi < allLines[li].bars.length; bi++) {
+      if (allLines[li].bars[bi].nthEnding !== null) {
+        nthLineIdx = li;
+        nthBarIdx  = bi;
+        break outer;
+      }
+    }
+  }
+
+  if (nthLineIdx === -1) {
+    return { sharedLines: allLines, nthLinePrefix: [], endings: [] };
+  }
+
+  const sharedLines = allLines.slice(0, nthLineIdx);
+  const nthLine     = allLines[nthLineIdx].bars;
+
+  // Bars before the first nth marker on the first nth line (skip spacers too)
+  let prefixEnd = nthBarIdx;
+  while (prefixEnd > 0 && nthLine[prefixEnd - 1].type === 'spacer') prefixEnd--;
+  const nthLinePrefix = nthLine.slice(0, prefixEnd).map(cloneBar);
+
+  // Build flat bar list WITH line break info from nthLineIdx onwards
+  const flatBarsWithLines = [];
+  for (let li = nthLineIdx; li < allLines.length; li++) {
+    const lineBars = allLines[li].bars;
+    for (let bi = 0; bi < lineBars.length; bi++) {
+      flatBarsWithLines.push({
+        bar: lineBars[bi],
+        lineIdx: li - nthLineIdx,
+        isFirstOnLine: bi === 0
+      });
+    }
+  }
+  const flatBars = flatBarsWithLines.map(fb => fb.bar);
+
+  // Find all nth-time marker positions in the flat sequence
+  const nthPositions = flatBars
+    .map((b, i) => b.nthEnding !== null ? i : -1)
+    .filter(i => i !== -1);
+
+  // Build each ending passage using correct boundary criteria
+  const endings = [];
+  for (let e = 0; e < nthPositions.length; e++) {
+    const start = nthPositions[e];
+
+    // End: next spacer OR next nth marker OR end of flat sequence
+    let end = flatBars.length;
+    for (let j = start + 1; j < flatBars.length; j++) {
+      if (flatBars[j].type === 'spacer' || flatBars[j].nthEnding !== null) {
+        end = j;
+        break;
+      }
+    }
+
+    const originalNth = flatBars[start].nthEnding;
+
+    // Build bars WITH line break info, stripping leading spacers
+    const rawEntries = flatBarsWithLines.slice(start, end)
+      .filter(fb => fb.bar.type !== 'spacer');
+
+    // Group into lines based on lineIdx changes
+    // Each time lineIdx changes, start a new line
+    const lines = [];
+    let currentLine = [];
+    let currentLineIdx = rawEntries.length > 0 ? rawEntries[0].lineIdx : -1;
+
+    for (const entry of rawEntries) {
+      if (entry.lineIdx !== currentLineIdx && currentLine.length > 0) {
+        lines.push(currentLine);
+        currentLine = [];
+        currentLineIdx = entry.lineIdx;
+      }
+      const nb = cloneBar(entry.bar);
+      nb.nthEnding = null;
+      currentLine.push(nb);
+    }
+    if (currentLine.length > 0) lines.push(currentLine);
+
+    endings.push({ originalNth, lines }); // lines: array of bar arrays
+  }
+
+  return { sharedLines, nthLinePrefix, endings };
+}
+
+// Build section output for one run (one or more consecutive occurrences)
+function buildRunSections(sectionObj, runCount, _unused, endingCursors) {
+  const name = sectionObj.name;
+  const { sharedLines, nthLinePrefix, endings } = parseNthEndings(sectionObj);
+  const numEndings = endings.length;
+
+  // ── No nth-time endings ──────────────────────────────────────────────────
+  if (numEndings === 0) {
+    const sec = JSON.parse(JSON.stringify(sectionObj));
+    if (runCount > 1) {
+      const allBars = sec.lines.flatMap(l => l.bars);
+      if (allBars.length > 0) {
+        const fb = allBars[0];
+        fb.repeat = (fb.repeat === 'end' || fb.repeat === 'both') ? 'both' : 'start';
+        const lb = allBars[allBars.length - 1];
+        lb.repeat = (lb.repeat === 'start' || lb.repeat === 'both') ? 'both' : 'end';
+      }
+    }
+    return { sections: [sec] };
+  }
+
+  // ── Has nth-time endings ─────────────────────────────────────────────────
+  let cur = endingCursors.get(name) || 0;
+
+  if (runCount === 1) {
+    const endingIdx = Math.min(cur, numEndings - 1);
+    const ending    = endings[endingIdx];
+    const endingLines = ending.lines;
+
+    // First line: nthLinePrefix + first ending line bars (plain, no nth marker)
+    const firstLineBars = [...nthLinePrefix.map(cloneBar), ...endingLines[0].map(cloneBar)];
+    const outputLines = [
+      ...sharedLines.map(l => JSON.parse(JSON.stringify(l))),
+      { bars: firstLineBars },
+      ...endingLines.slice(1).map(line => ({ bars: line.map(cloneBar) }))
+    ];
+
+    endingCursors.set(name, Math.min(cur + 1, numEndings));
+    return { sections: [{ name, lines: outputLines }] };
+  }
+
+  // Repeating run: cycle back if cursor exhausted at start of run
+  if (cur >= numEndings) cur = 0;
+
+  // Assign endings to each occurrence
+  const assigned = [];
+  let c = cur;
+  for (let occ = 0; occ < runCount; occ++) {
+    const endingIdx = c < numEndings ? c : numEndings - 1;
+    assigned.push(endings[endingIdx]);
+    c++;
+  }
+
+  // All-identical check using first line of each ending
+  const allIdentical = assigned.every(e =>
+    JSON.stringify(e.lines) === JSON.stringify(assigned[0].lines)
+  );
+
+  // ── All-identical endings ────────────────────────────────────────────────
+  if (allIdentical) {
+    const firstEndingLines = assigned[0].lines;
+    const outputLines = sharedLines.map(l => JSON.parse(JSON.stringify(l)));
+    // First line of ending: nthLinePrefix + first ending line bars
+    outputLines.push({ bars: [...nthLinePrefix.map(cloneBar), ...firstEndingLines[0].map(cloneBar)] });
+    // Remaining ending lines as-is
+    for (let li = 1; li < firstEndingLines.length; li++) {
+      outputLines.push({ bars: firstEndingLines[li].map(cloneBar) });
+    }
+    const allBars = outputLines.flatMap(l => l.bars);
+    if (allBars.length > 0) {
+      const fb = allBars[0];
+      fb.repeat = (fb.repeat === 'end' || fb.repeat === 'both') ? 'both' : 'start';
+      const lb = allBars[allBars.length - 1];
+      lb.repeat = (lb.repeat === 'start' || lb.repeat === 'both') ? 'both' : 'end';
+    }
+    endingCursors.set(name, Math.min(cur + runCount, numEndings));
+    return { sections: [{ name, lines: outputLines }] };
+  }
+
+  // ── Normal repeating run with distinct endings ───────────────────────────
+  const outputLines = sharedLines.map(l => JSON.parse(JSON.stringify(l)));
+
+  // Opening repeat on first bar of entire section
+  const firstSharedBar = outputLines.length > 0 ? outputLines[0].bars[0] : null;
+  if (firstSharedBar) {
+    firstSharedBar.repeat = (firstSharedBar.repeat === 'end' || firstSharedBar.repeat === 'both') ? 'both' : 'start';
+  }
+
+  for (let occ = 0; occ < runCount; occ++) {
+    const ending = assigned[occ];
+    const newNth = occ + 1;
+    const endingLines = ending.lines;
+
+    // First line of this ending
+    const firstLineEndingBars = endingLines[0].map((b, bi) => {
+      const nb = cloneBar(b);
+      if (bi === 0) nb.nthEnding = newNth;
+      return nb;
+    });
+
+    let firstLineBars;
+    if (occ === 0) {
+      firstLineBars = [...nthLinePrefix.map(cloneBar), ...firstLineEndingBars];
+    } else {
+      const spacers = nthLinePrefix.map(() => ({
+        type: 'spacer', chords: [], repeat: null, nthEnding: null
+      }));
+      firstLineBars = [...spacers, ...firstLineEndingBars];
+    }
+
+    // Closing repeat on last bar of all-but-last occurrence
+    const isLastOcc = occ === runCount - 1;
+    // Find very last bar of this ending across all its lines
+    const allEndingBars = endingLines.flatMap(l => l);
+    if (!isLastOcc && allEndingBars.length > 0) {
+      const lb = isLastOcc ? null : allEndingBars[allEndingBars.length - 1];
+      if (lb) lb.repeat = (lb.repeat === 'start' || lb.repeat === 'both') ? 'both' : 'end';
+    }
+
+    outputLines.push({ bars: firstLineBars });
+
+    // Remaining lines of this ending
+    for (let li = 1; li < endingLines.length; li++) {
+      outputLines.push({ bars: endingLines[li].map(cloneBar) });
+    }
+  }
+
+  endingCursors.set(name, Math.min(cur + runCount, numEndings));
+  return { sections: [{ name, lines: outputLines }] };
+
+  endingCursors.set(name, Math.min(cur + runCount, numEndings));
+  return { sections: [{ name, lines: outputLines }] };
+}
+
+function expandStructure(song) {
+  try {
+    const s = JSON.parse(JSON.stringify(song));
+    const compact = extractCompactStructure(s.structure, s.sections);
+    
+    if (!compact) {
+      // No compact structure found — just apply implied repeats
+      return addImpliedRepeats(s);
+    }
+
+    const runs = groupIntoRuns(compact);
+    
+    // Match runs to provisional sections greedily (by index, not name)
+    // For each run, find next unused section with matching name
+    const usedIndices = new Set();
+    const runMatches = []; // { run, sectionIdx }
+
+    for (const run of runs) {
+      // Find next unused matching section
+      let matchIdx = -1;
+      for (let i = 0; i < s.sections.length; i++) {
+        if (!usedIndices.has(i) && s.sections[i].name === run.letter) {
+          matchIdx = i;
+          break;
+        }
+      }
+      // Fall back to first matching (already used)
+      if (matchIdx === -1) {
+        matchIdx = s.sections.findIndex(sec => sec.name === run.letter);
+      }
+      if (matchIdx !== -1) {
+        usedIndices.add(matchIdx);
+        runMatches.push({ run, sectionIdx: matchIdx });
+      }
+    }
+
+    // Build output in extracted structure order, interleaving unmatched provisionals
+    const endingCursors = new Map();
+    const outputSections = [];
+    const matchedPIs = new Set(runMatches.map(m => m.sectionIdx));
+    let lastEmittedPI = -1;
+
+    for (const { run, sectionIdx } of runMatches) {
+      // Emit any unmatched provisional sections that come before this run's pi
+      for (let pi = lastEmittedPI + 1; pi < sectionIdx; pi++) {
+        if (!matchedPIs.has(pi)) {
+          outputSections.push(s.sections[pi]);
+        }
+      }
+      lastEmittedPI = sectionIdx;
+
+      // Emit this run
+      const { sections } = buildRunSections(
+        s.sections[sectionIdx], run.count, 0, endingCursors
+      );
+      outputSections.push(...sections);
+    }
+
+    // Emit any remaining unmatched provisional sections after the last run
+    for (let pi = lastEmittedPI + 1; pi < s.sections.length; pi++) {
+      if (!matchedPIs.has(pi)) {
+        outputSections.push(s.sections[pi]);
+      }
+    }
+
+    const expandedSong = { ...s, sections: outputSections };
+    return addImpliedRepeats(expandedSong);
+  } catch (e) {
+    console.warn('expandStructure error:', e);
+    return song;
+  }
+}
+
+// ── Implied repeat detection ────────────────────────────────────────────────
 function addImpliedRepeats(song) {
   // Work on a deep copy — never mutate the live Song object
   const s = JSON.parse(JSON.stringify(song));
@@ -1726,7 +2074,7 @@ function addImpliedRepeats(song) {
 }
 
 function exportIReal() {
-  const song = addImpliedRepeats(buildSong());
+  const song = expandStructure(buildSong());
 
   // ── Metadata ──────────────────────────────────────────────────────────────
   const songTitle = song.title || 'Untitled';
@@ -2206,6 +2554,11 @@ function showToast(msg) {
   t.classList.add('show');
   clearTimeout(toastTimer);
   toastTimer = setTimeout(() => t.classList.remove('show'), 1800);
+}
+
+function toggleExpandedOutput() {
+  expandedOutputOn = !expandedOutputOn;
+  buildOutput();
 }
 
 function copyOutput() {
