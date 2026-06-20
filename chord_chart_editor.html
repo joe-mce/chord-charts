@@ -1626,14 +1626,6 @@ function toIRealSection(title) {
 
 // Expand structure string into ordered array of section letter keys
 // e.g. "AABA" -> ['A','A','B','A']
-function parseStructure(str) {
-  if (!str) return null;
-  const result = [];
-  for (const ch of str.toUpperCase()) {
-    if (ch >= 'A' && ch <= 'Z') result.push(ch);
-  }
-  return result.length > 0 ? result : null;
-}
 
 // Cell distribution across bars on a line (must total 16)
 function getCellDistribution(numBars) {
@@ -2107,46 +2099,12 @@ function exportIReal() {
   }
   const key = normaliseKey(song.key);
 
-  // ── Play sequence from structure ──────────────────────────────────────────
-  const sectionMap = new Map();
-  const seenTitles = new Map();
-  song.sections.forEach(sec => {
-    const t = sec.name;
-    const count = seenTitles.get(t) || 0;
-    seenTitles.set(t, count + 1);
-    sectionMap.set(t + '_' + count, sec);
-    if (!sectionMap.has(t)) sectionMap.set(t, sec);
-  });
-
-  const structureParsed = parseStructure(song.structure);
-  let orderedSections; // [{section, openRepeat, closeRepeat}]
-
-  if (structureParsed) {
-    const playSequence = [];
-    let i = 0;
-    while (i < structureParsed.length) {
-      const title = structureParsed[i];
-      let run = 1;
-      while (i + run < structureParsed.length && structureParsed[i + run] === title) run++;
-      const sec = sectionMap.get(title) || sectionMap.get(title + '_0');
-      if (sec) playSequence.push({ section: sec, openRepeat: run >= 2, closeRepeat: run >= 2 });
-      i += run;
-    }
-    orderedSections = playSequence;
-  } else {
-    orderedSections = song.sections.map(sec => ({ section: sec, openRepeat: false, closeRepeat: false }));
-  }
-  if (!orderedSections.length) return;
-
   // ── Build bar items ────────────────────────────────────────────────────────
-  // Each item: { cells, openStr, closeStr }
-  // Then do a global s/l pass before building the block string.
   const allBarItems = [];
   let isFirstBarEver = true;
 
-  orderedSections.forEach((entry, entryIdx) => {
-    const { section, openRepeat, closeRepeat } = entry;
-    const isLastSection = entryIdx === orderedSections.length - 1;
+  song.sections.forEach((section, entryIdx) => {
+    const isLastSection = entryIdx === song.sections.length - 1;
     const rehearsalMark = toIRealSection(section.name);
     const customText = section.name && !rehearsalMark ? `<*69${section.name}>` : '';
 
@@ -2176,7 +2134,7 @@ function exportIReal() {
         // Opening barline
         let openBL = '';
         if (isFirstBarOfSection) {
-          openBL = (openRepeat || bar.repeat === 'start' || bar.repeat === 'both') ? '{' : '[';
+          openBL = (bar.repeat === 'start' || bar.repeat === 'both') ? '{' : '[';
         } else if (bar.repeat === 'start' || bar.repeat === 'both') {
           openBL = '{';
         }
@@ -2184,7 +2142,7 @@ function exportIReal() {
         // Closing barline
         let closeBL = '|';
         if (isLastBarOfSection) {
-          if (closeRepeat || bar.repeat === 'end' || bar.repeat === 'both') closeBL = '}';
+          if (bar.repeat === 'end' || bar.repeat === 'both') closeBL = '}';
           else if (isLastSection) closeBL = 'Z';
           else closeBL = ']';
         } else if (bar.repeat === 'end' || bar.repeat === 'both') {
