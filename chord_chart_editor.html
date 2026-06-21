@@ -932,7 +932,7 @@ function renderLineFromBarObjects(barObjects) {
   // Build intermediate representations from bar objects
   const intermediates = barObjects.map(bar => ({
     initialString: (bar.repeat === 'start' || bar.repeat === 'both') ? ':' : '',
-    content:       bar.type === 'normal' ? bar.chords.join(' ') : '',
+    content:       bar.type === 'normal' ? bar.chords.join(' ') : bar.type === 'simile' ? '%' : '',
     finalString:   (bar.repeat === 'end'  || bar.repeat === 'both') ? ':' : '',
     nthEnding:     bar.nthEnding,
     isSpacer:      bar.type === 'spacer',
@@ -1036,8 +1036,8 @@ function formatBar(initialString, content, finalString, separator, isFirstBar = 
   // Get chord symbols or determine if it's a repeat bar
   let layoutStr;
   if (!content || content === '%') {
-    // All spacer bars (blank bars before nth-time ending) show blank, not %
-    if (isSpacer || finalString.match(/^\s\d$/)) {
+    // Only suppress % for actual spacer bars
+    if (isSpacer) {
       layoutStr = ' '.repeat(availableForContent);
     } else {
       layoutStr = centerPercent(availableForContent);
@@ -2122,9 +2122,7 @@ function exportIReal() {
         // ── Spacer bars ────────────────────────────────────────────────────
         if (bar.type === 'spacer') {
           const cells = Array(numCells).fill(' ');
-          const nextBar = barIdx < numBars - 1 ? line.bars[barIdx + 1] : null;
-          const closeBL = (!nextBar || nextBar.type !== 'spacer') ? '|' : '';
-          allBarItems.push({ cells, openStr: '', closeStr: closeBL, isSpacer: true });
+          allBarItems.push({ cells, openStr: '', closeStr: '', isSpacer: true });
           return;
         }
 
@@ -2137,6 +2135,9 @@ function exportIReal() {
           openBL = (bar.repeat === 'start' || bar.repeat === 'both') ? '{' : '[';
         } else if (bar.repeat === 'start' || bar.repeat === 'both') {
           openBL = '{';
+        } else if (bar.nthEnding !== null && bar.nthEnding > 1) {
+          // nth(>1)-time endings always get an explicit opening barline
+          openBL = '|';
         }
 
         // Closing barline
