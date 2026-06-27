@@ -928,6 +928,14 @@ function buildSong() {
 }
 
 // ── Plain text renderer ─────────────────────────────────────────────────────
+function distributeWidth(numBars) {
+  if (numBars <= 4) return Array(numBars).fill(9);
+  const total = 36;
+  const base = Math.floor(total / numBars);
+  const remainder = total % numBars;
+  return Array.from({ length: numBars }, (_, i) => base + (i < remainder ? 1 : 0));
+}
+
 function renderLineFromBarObjects(barObjects) {
   // Build intermediate representations from bar objects
   const intermediates = barObjects.map(bar => ({
@@ -943,22 +951,116 @@ function renderLineFromBarObjects(barObjects) {
     const nth = intermediates[i].nthEnding;
     if (nth === null) continue;
     if (i === 0) {
-      // First bar on line: number becomes part of the initial string
       intermediates[i].initialString = nth + '|';
     } else {
-      // Not first bar: number goes as final char of the previous bar slot
       intermediates[i - 1].finalString = ' ' + nth;
     }
     intermediates[i].nthEnding = null;
   }
 
-  // Render each bar
+  // Compute per-bar widths (naive distribution)
+  const widths = distributeWidth(intermediates.length);
+
+  // ── Stealing pass ──────────────────────────────────────────────────────────
+  // Calculate minimum width needed for each bar
+  function minBarWidth(im) {
+    const initialLen = im.initialString === ':' ? 2 : im.initialString.length; // isFirstBar handled below
+    const finalLen   = im.finalString.length;
+    const fixed      = initialLen + finalLen + 1; // +1 separator
+    if (im.isSpacer || !im.content || im.content === '%') return fixed + (im.content === '%' ? 1 : 0);
+    const tokens     = im.content.split(/\s+/).filter(Boolean);
+    const chordLen   = tokens.reduce((s, t) => s + t.length, 0);
+    return fixed + chordLen + Math.max(0, tokens.length - 1);
+  }
+
+  // Check first bar's initial string length (|: counts as 2)
+  function getInitialLen(im, isFirst) {
+    return im.initialString === ':' && isFirst ? 2 : im.initialString.length;
+  }
+
+  // Calculate spare space for a bar at index i with its current width
+  function spareSpace(i) {
+    const im = intermediates[i];
+    const initialLen = getInitialLen(im, i === 0);
+    const finalLen   = im.finalString.length;
+    const avail      = widths[i] - initialLen - finalLen - 1;
+    if (im.isSpacer || !im.content || im.content === '') return avail;
+    if (im.content === '%') return avail - 1;
+    const tokens = im.content.split(/\s+/).filter(Boolean);
+    const chordLen = tokens.reduce((s, t) => s + t.length, 0);
+    const minNeeded = chordLen + Math.max(0, tokens.length - 1);
+    return avail - minNeeded;
+  }
+
+  // Find bars that overflow (negative spare space)
+  for (let pass = 0; pass < 50; pass++) { // cap iterations
+    // Find first overflowing bar
+    let overflowIdx = -1;
+    for (let i = 0; i < intermediates.length; i++) {
+      if (spareSpace(i) < 0) { overflowIdx = i; break; }
+    }
+    if (overflowIdx === -1) break; // no overflow, done
+
+    // Build traversal order for stealing:
+    // 1. Partner in the same 2-bar group
+    // 2. Expand from group boundary toward closest end of line
+    // 3. Then expand in the other direction
+    const n = intermediates.length;
+    const groupIdx = Math.floor(overflowIdx / 2); // which 2-bar group
+    const groupStart = groupIdx * 2;
+    const partner = overflowIdx % 2 === 0 ? groupStart + 1 : groupStart; // other bar in group
+    
+    // Distance from group to each end of line
+    const groupEnd = Math.min(groupStart + 1, n - 1);
+    const distToStart = groupStart;           // bars before the group
+    const distToEnd = (n - 1) - groupEnd;  // bars after the group
+    
+    // Bars before the group (in reverse order, closest first)
+    const beforeGroup = [];
+    for (let i = groupStart - 1; i >= 0; i--) beforeGroup.push(i);
+    
+    // Bars after the group (in order, closest first)
+    const afterGroup = [];
+    for (let i = groupEnd + 1; i < n; i++) afterGroup.push(i);
+    
+    // Determine direction order: toward closest end first (tie → rightward)
+    let firstExpand, secondExpand;
+    if (distToEnd <= distToStart) {
+      // End is closer or tied → expand rightward first
+      firstExpand  = afterGroup;
+      secondExpand = beforeGroup;
+    } else {
+      firstExpand  = beforeGroup;
+      secondExpand = afterGroup;
+    }
+
+    // Build final priority list
+    const candidates = [];
+    if (partner >= 0 && partner < n && partner !== overflowIdx) candidates.push(partner);
+    candidates.push(...firstExpand, ...secondExpand);
+
+    // Find widest candidate with spare space
+    let bestIdx = -1;
+    let bestWidth = -1;
+    for (const i of candidates) {
+      if (i === overflowIdx) continue;
+      if (spareSpace(i) > 0 && widths[i] > bestWidth) {
+        bestWidth = widths[i];
+        bestIdx = i;
+      }
+    }
+    if (bestIdx === -1) break; // no bar has space to give
+
+    widths[bestIdx]--;
+    widths[overflowIdx]++;
+  }
+
+  // Render each bar with final widths
   let output = '';
   for (let i = 0; i < intermediates.length; i++) {
     const { initialString, content, finalString, isSpacer } = intermediates[i];
-    // Spacer bars with no nth-time finalString use a space separator (not |)
     const separator = (isSpacer && finalString === '') ? ' ' : '|';
-    output += formatBar(initialString, content, finalString, separator, i === 0, isSpacer);
+    output += formatBar(initialString, content, finalString, separator, i === 0, isSpacer, widths[i]);
   }
   return output;
 }
@@ -1027,11 +1129,11 @@ function extractBarComponents(barInput) {
   return { initialString, content, finalString };
 }
 
-function formatBar(initialString, content, finalString, separator, isFirstBar = false, isSpacer = false) {
-  const initialLen = initialString === ':' && isFirstBar ? 2 : initialString.length; // |: counts as 2
+function formatBar(initialString, content, finalString, separator, isFirstBar = false, isSpacer = false, barTotalWidth = 9) {
+  // barTotalWidth = initialLen + contentLen + finalLen + separatorLen
+  const initialLen = initialString === ':' && isFirstBar ? 2 : initialString.length;
   const finalLen = finalString.length;
-  const separatorLen = 1;
-  const availableForContent = 8 - initialLen - finalLen;
+  const availableForContent = barTotalWidth - initialLen - finalLen - 1; // -1 for separator
   
   // Get chord symbols or determine if it's a repeat bar
   let layoutStr;
@@ -1094,11 +1196,13 @@ function layoutChords(content, availableWidth, initialLen) {
     return tokens.join(' ').padEnd(availableWidth);
   }
 
-  // Ideal absolute positions in the 8-char bar: 2 chords → 0,4; 3 chords → 0,3,6
-  const idealAbs = tokens.length === 2 ? [0, 4] : [0, 3, 6];
-
-  // Ideal relative positions = ideal absolute - initialLen (first chord always at rel 0)
-  const idealRel = idealAbs.map((p, i) => i === 0 ? 0 : Math.max(0, p - initialLen));
+  // Ideal positions scale proportionally to the bar's content width
+  // Base reference is 8-char content width: 2 chords → 0,4; 3 chords → 0,3,6
+  // Scale: idealAbs[i] = ceil(i * availableWidth / numChords)
+  const idealRel = tokens.map((_, i) => {
+    if (i === 0) return 0;
+    return Math.ceil(i * availableWidth / tokens.length) - initialLen;
+  }).map(p => Math.max(0, p));
 
   let result = tokens[0];
   let cursor = tokens[0].length;
