@@ -421,8 +421,8 @@
     transition: color 0.1s;
     -webkit-tap-highlight-color: transparent;
   }
-  #output-menu-btn  { right: 46px; }
-  #expand-toggle-btn { right: 82px; }
+  #output-menu-btn   { right: 46px; }
+  #expand-toggle-btn { right: 46px; }
   .output-menu-btn:hover { color: var(--text); border-color: var(--border2); }
   .output-menu-btn.active { background: #2a2a40; border-color: #5555aa; color: #aaaaee; }
 
@@ -571,7 +571,7 @@
     border: 0.5px solid var(--border);
     border-radius: var(--radius);
     padding: 10px;
-    font-size: 13px;
+    font-size: 16px;
     font-family: var(--mono);
     color: var(--text);
     outline: none;
@@ -706,9 +706,6 @@
         <line x1="3" y1="12" x2="21" y2="12"/>
       </svg>
     </button>
-    <button class="output-menu-btn" id="output-menu-btn" onclick="showOutputMenu(event)" title="More options">
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="5" cy="12" r="1.5" fill="currentColor"/><circle cx="12" cy="12" r="1.5" fill="currentColor"/><circle cx="19" cy="12" r="1.5" fill="currentColor"/></svg>
-    </button>
     <button class="copy-btn" onclick="copyOutput()" title="Copy">
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
         <rect x="9" y="9" width="13" height="13" rx="2"/>
@@ -729,6 +726,25 @@
     <div class="import-modal-buttons">
       <button id="import-cancel-btn">Cancel</button>
       <button class="primary" id="import-submit-btn">Import</button>
+    </div>
+  </div>
+</div>
+
+<div class="import-modal-backdrop" id="settings-backdrop">
+  <div class="import-modal">
+    <h2>Settings</h2>
+    <div style="margin-bottom: 16px;">
+      <div style="font-size: 13px; color: var(--text2); margin-bottom: 12px; line-height: 1.5;">
+        When copying output, wrap with the following text (each on its own line):
+      </div>
+      <label style="display:block; font-size: 12px; color: var(--text3); margin-bottom: 4px;">Wrap before</label>
+      <textarea id="settings-wrap-before" rows="2" style="width:100%; box-sizing:border-box; background:var(--bg3); border:0.5px solid var(--border); border-radius:var(--radius); padding:8px; font-family:var(--mono); font-size:16px; color:var(--text); resize:vertical; margin-bottom:12px;"></textarea>
+      <label style="display:block; font-size: 12px; color: var(--text3); margin-bottom: 4px;">Wrap after</label>
+      <textarea id="settings-wrap-after" rows="2" style="width:100%; box-sizing:border-box; background:var(--bg3); border:0.5px solid var(--border); border-radius:var(--radius); padding:8px; font-family:var(--mono); font-size:16px; color:var(--text); resize:vertical;"></textarea>
+    </div>
+    <div class="import-modal-buttons">
+      <button id="settings-cancel-btn">Cancel</button>
+      <button class="primary" id="settings-save-btn">Save</button>
     </div>
   </div>
 </div>
@@ -1011,9 +1027,8 @@ function renderLineFromBarObjects(barObjects) {
     const partner = overflowIdx % 2 === 0 ? groupStart + 1 : groupStart; // other bar in group
     
     // Distance from group to each end of line
-    const groupEnd = Math.min(groupStart + 1, n - 1);
-    const distToStart = groupStart;           // bars before the group
-    const distToEnd = (n - 1) - groupEnd;  // bars after the group
+    const distToStart = groupStart;
+    const distToEnd   = n - 1 - (groupStart + 1 < n ? groupStart + 1 : groupStart);
     
     // Bars before the group (in reverse order, closest first)
     const beforeGroup = [];
@@ -1021,11 +1036,12 @@ function renderLineFromBarObjects(barObjects) {
     
     // Bars after the group (in order, closest first)
     const afterGroup = [];
+    const groupEnd = Math.min(groupStart + 1, n - 1);
     for (let i = groupEnd + 1; i < n; i++) afterGroup.push(i);
     
     // Determine direction order: toward closest end first (tie → rightward)
     let firstExpand, secondExpand;
-    if (distToEnd <= distToStart) {
+    if (distToEnd >= distToStart) {
       // End is closer or tied → expand rightward first
       firstExpand  = afterGroup;
       secondExpand = beforeGroup;
@@ -1198,10 +1214,10 @@ function layoutChords(content, availableWidth, initialLen) {
 
   // Ideal positions scale proportionally to the bar's content width
   // Base reference is 8-char content width: 2 chords → 0,4; 3 chords → 0,3,6
-  // Scale: idealAbs[i] = ceil(i * availableWidth / numChords)
+  // Scale: idealAbs[i] = round(i * availableWidth / numChords)
   const idealRel = tokens.map((_, i) => {
     if (i === 0) return 0;
-    return Math.ceil(i * availableWidth / tokens.length) - initialLen;
+    return Math.round(i * availableWidth / tokens.length) - initialLen;
   }).map(p => Math.max(0, p));
 
   let result = tokens[0];
@@ -1649,27 +1665,14 @@ function actionDelete() {
 }
 
 // ── Output menu ────────────────────────────────────────────────────────────
-function showOutputMenu(e) {
-  e.stopPropagation();
-  closeMenu();
-  const btn = document.getElementById('output-menu-btn');
-  const rect = btn.getBoundingClientRect();
-  const m = document.createElement('div');
-  m.className = 'menu-overlay';
-  const menuW = 180;
-  let left = rect.right - menuW;
-  if (left < 8) left = 8;
-  m.style.top = (rect.bottom + 6) + 'px';
-  m.style.left = left + 'px';
+function openSettings() {
+  document.getElementById('settings-wrap-before').value = wrapBefore;
+  document.getElementById('settings-wrap-after').value  = wrapAfter;
+  document.getElementById('settings-backdrop').classList.add('active');
+}
 
-  const b = document.createElement('button');
-  b.textContent = 'Export to iReal Pro';
-  b.addEventListener('click', () => { closeMenu(); exportIReal(); });
-  m.appendChild(b);
-
-  m.style.pointerEvents = 'all';
-  document.getElementById('menu-portal').appendChild(m);
-  menuState = m;
+function closeSettings() {
+  document.getElementById('settings-backdrop').classList.remove('active');
 }
 
 // ── iReal Pro export ───────────────────────────────────────────────────────
@@ -2625,8 +2628,16 @@ function toggleExpandedOutput() {
   buildOutput();
 }
 
+let wrapBefore = '```';
+let wrapAfter  = '```';
+
 function copyOutput() {
-  navigator.clipboard.writeText(document.getElementById('output').textContent)
+  const text = document.getElementById('output').textContent;
+  const wrap = wrapBefore || wrapAfter;
+  const wrapped = wrap
+    ? (wrapBefore ? wrapBefore + '\n' : '') + text + (wrapAfter ? '\n' + wrapAfter : '')
+    : text;
+  navigator.clipboard.writeText(wrapped)
     .then(() => showToast('Copied to clipboard'))
     .catch(() => showToast('Copy failed'));
 }
@@ -2895,9 +2906,48 @@ function performImport() {
 }
 
 // Menu button and modal event listeners
-document.getElementById('menu-btn').addEventListener('click', openImportModal);
+document.getElementById('menu-btn').addEventListener('click', e => {
+  e.stopPropagation();
+  closeMenu();
+  const btn = document.getElementById('menu-btn');
+  const rect = btn.getBoundingClientRect();
+  const m = document.createElement('div');
+  m.className = 'menu-overlay';
+  const menuW = 200;
+  let left = rect.right - menuW;
+  if (left < 8) left = 8;
+  m.style.top = (rect.bottom + 6) + 'px';
+  m.style.left = left + 'px';
+  m.style.pointerEvents = 'all';
+
+  const items = [
+    ['Import from plain text', () => { closeMenu(); openImportModal(); }],
+    ['Export to iReal Pro',    () => { closeMenu(); exportIReal(); }],
+    ['Settings',               () => { closeMenu(); openSettings(); }],
+  ];
+  items.forEach(([label, fn]) => {
+    const b = document.createElement('button');
+    b.textContent = label;
+    b.addEventListener('click', fn);
+    m.appendChild(b);
+  });
+
+  document.getElementById('menu-portal').appendChild(m);
+  menuState = m;
+});
 document.getElementById('import-cancel-btn').addEventListener('click', closeImportModal);
 document.getElementById('import-submit-btn').addEventListener('click', performImport);
+
+document.getElementById('settings-cancel-btn').addEventListener('click', closeSettings);
+document.getElementById('settings-save-btn').addEventListener('click', () => {
+  wrapBefore = document.getElementById('settings-wrap-before').value;
+  wrapAfter  = document.getElementById('settings-wrap-after').value;
+  closeSettings();
+  showToast('Settings saved');
+});
+document.getElementById('settings-backdrop').addEventListener('click', e => {
+  if (e.target === document.getElementById('settings-backdrop')) closeSettings();
+});
 
 // Close modal on backdrop click
 document.getElementById('import-modal-backdrop').addEventListener('click', (e) => {
