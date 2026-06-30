@@ -1695,6 +1695,8 @@ function toIRealChord(raw) {
     .replace(/Δ7/g,    '^7')
     .replace(/ø7/g,    'h7')
     .replace(/m(?!aj|a)/g, '-');     // m -> - but not in maj/ma
+  // No root before the slash (e.g. "/F") — use iReal's invisible-root token W
+  if (s === '' && bass) s = 'W';
   return s + bass;
 }
 
@@ -1737,9 +1739,9 @@ function toIRealSection(title) {
 // Cell distribution across bars on a line (must total 16)
 function getCellDistribution(numBars) {
   const map = {
-    1: [16],
-    2: [8, 8],
-    3: [6, 5, 5],
+    1: [4],
+    2: [4, 4],
+    3: [4, 4, 4],
     4: [4, 4, 4, 4],
     5: [4, 3, 3, 3, 3],
     6: [3, 3, 3, 3, 2, 2],
@@ -2207,6 +2209,17 @@ function exportIReal() {
   const key = normaliseKey(song.key);
 
   // ── Build bar items ────────────────────────────────────────────────────────
+  // Map time signature to iReal token (default T44)
+  function toIRealTimeSig(ts) {
+    const map = {
+      '4/4': 'T44', '3/4': 'T34', '5/4': 'T54', '6/4': 'T64', '7/4': 'T74',
+      '2/2': 'T22', '3/2': 'T32', '5/8': 'T58', '6/8': 'T68', '7/8': 'T78',
+      '9/8': 'T98', '12/8': 'T12',
+    };
+    return map[ts] || 'T44';
+  }
+  const timeSigToken = toIRealTimeSig(song.timeSig);
+
   const allBarItems = [];
   let isFirstBarEver = true;
 
@@ -2220,6 +2233,10 @@ function exportIReal() {
       const isLastLineOfSection  = lineIdx === section.lines.length - 1;
       const numBars = line.bars.length;
       const cellDist = getCellDistribution(numBars);
+      // For lines with fewer than 4 bars, the capped distribution doesn't
+      // total 16 — pad the LAST bar's cell count with blank cells to fill the line
+      const cellDistTotal = cellDist.reduce((a, b) => a + b, 0);
+      const padCells = 16 - cellDistTotal; // extra blank cells appended to last bar
 
       line.bars.forEach((bar, barIdx) => {
         const isFirstBarOfSection = isFirstLineOfSection && barIdx === 0;
@@ -2258,17 +2275,6 @@ function exportIReal() {
         }
 
         // Build opening string:
-  // Map time signature to iReal token (default T44)
-  function toIRealTimeSig(ts) {
-    const map = {
-      '4/4': 'T44', '3/4': 'T34', '5/4': 'T54', '6/4': 'T64', '7/4': 'T74',
-      '2/2': 'T22', '3/2': 'T32', '5/8': 'T58', '6/8': 'T68', '7/8': 'T78',
-      '9/8': 'T98', '12/8': 'T12',
-    };
-    return map[ts] || 'T44';
-  }
-  const timeSigToken = toIRealTimeSig(song.timeSig);
-
         // [rehearsalMark] [openBL] [T44 if first] [customText] [Nth marker] ...cells
         let openStr = '';
         if (isFirstBarOfSection) openStr += rehearsalMark;
@@ -2279,6 +2285,17 @@ function exportIReal() {
 
         allBarItems.push({ cells, openStr, closeStr: closeBL, isSpacer: false });
       });
+
+      // Pad the line to a full 16 cells with blank cells appended AFTER
+      // the line's closing barline (only when fewer than 4 bars on the line)
+      if (padCells > 0) {
+        allBarItems.push({
+          cells: Array(padCells).fill(' '),
+          openStr: '',
+          closeStr: '',
+          isSpacer: true,
+        });
+      }
     });
   });
 
