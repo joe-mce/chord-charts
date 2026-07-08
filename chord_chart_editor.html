@@ -718,6 +718,18 @@
 <div class="toast" id="toast"></div>
 <div id="menu-portal"></div>
 
+<div class="import-modal-backdrop" id="ireal-import-backdrop">
+  <div class="import-modal">
+    <h2>Import from iReal Pro</h2>
+    <div style="font-size:13px; color:var(--text2); margin-bottom:10px;">Paste an iReal Pro URL (irealbook:// or irealb://)</div>
+    <textarea id="ireal-import-textarea" placeholder="irealbook://..." rows="4" style="min-height:80px; font-size:16px;"></textarea>
+    <div class="import-modal-buttons">
+      <button id="ireal-import-cancel-btn">Cancel</button>
+      <button class="primary" id="ireal-import-submit-btn">Import</button>
+    </div>
+  </div>
+</div>
+
 <div class="import-modal-backdrop" id="import-modal-backdrop">
   <div class="import-modal">
     <h2>Import Plain Text Chord Chart</h2>
@@ -2659,7 +2671,322 @@ function copyOutput() {
     .catch(() => showToast('Copy failed'));
 }
 
-// ── Import functionality ───────────────────────────────────────────────────
+// ── iReal Pro import ───────────────────────────────────────────────────────
+
+function openIRealImportModal() {
+  const ta = document.getElementById('ireal-import-textarea');
+  ta.value = '';
+  document.getElementById('ireal-import-backdrop').classList.add('active');
+  setTimeout(() => ta.focus(), 50);
+}
+
+// Deobfuscate irealb:// chord block — strip preamble first, then apply swap algorithm
+function deobfuscateIReal(s) {
+  s = s.replace(/^1r34LbKcu7/, '');
+
+  function hussle(str) {
+    let result = '';
+    while (str.length > 50) {
+      const seg = str.slice(0, 50);
+      str = str.slice(50);
+      if (str.length < 2) { result += seg; continue; }
+      result += seg.slice(45, 50).split('').reverse().join('')
+              + seg.slice(5,  10)
+              + seg.slice(26, 40).split('').reverse().join('')
+              + seg.slice(24, 26)
+              + seg.slice(10, 24).split('').reverse().join('')
+              + seg.slice(40, 45)
+              + seg.slice(0,   5).split('').reverse().join('');
+    }
+    return result + str;
+  }
+
+  s = hussle(s);
+  s = s.replace(/XyQ/g, '   '); // 3 empty cells
+  s = s.replace(/LZ/g,  ' |'); // 1 empty cell + barline
+  s = s.replace(/Kcl/g, '| x'); // barline + repeat-bar
+  return s;
+}
+
+// Extract fields from iReal URL body robustly
+// Block is identified by starting with '1r34LbKcu7' (irealb) or containing barlines (irealbook)
+// Trailing metadata fields (tempo, style) after the final Z are discarded
+function extractIRealFields(body) {
+  const parts = body.split('=');
+  let blockIdx = -1;
+  for (let i = 0; i < parts.length; i++) {
+    if (parts[i].startsWith('1r34LbKcu7') || /[\[\]{}|]/.test(parts[i])) {
+      blockIdx = i;
+      break;
+    }
+  }
+  if (blockIdx === -1) blockIdx = 5;
+
+  let blockRaw = parts.slice(blockIdx).join('=');
+  // Trim trailing metadata after final Z
+  const lastZ = blockRaw.lastIndexOf('Z');
+  if (lastZ !== -1) blockRaw = blockRaw.slice(0, lastZ + 1);
+
+  // Extract metadata from before blockIdx, ignoring empty strings
+  const nonEmpty = parts.slice(0, blockIdx).filter(p => p.trim());
+  return {
+    title:    nonEmpty[0] || '',
+    composer: nonEmpty[1] || '',
+    style:    nonEmpty[2] || '',
+    key:      nonEmpty[3] || '',
+    blockRaw,
+  };
+}
+
+function parseIRealBlock(block) {
+  const rehearsalMap = { A:'A', B:'B', C:'C', D:'D', V:'Verse', i:'Intro' };
+  const ignored = [];
+
+  let timeSig = '';
+  let timeSigSeen = false;
+  let sections = [];
+
+  let currentSection = { name: '', lines: [] };
+  let currentLine = { bars: [] };
+  let currentBarChords = [];
+  let currentBarNth = null;
+  let cellCount = 0;
+  let completedBars = [];
+  let rBarIndex = null;
+
+  function commitBar() {
+    let barStr = currentBarChords.join(' ');
+    if (currentBarNth !== null && currentBarNth > 0) barStr = currentBarNth + '|' + barStr;
+    currentLine.bars.push(barStr);
+    completedBars.push([...currentBarChords]);
+    currentBarChords = [];
+    currentBarNth = null;
+  }
+
+  function countCell() {
+    cellCount++;
+  }
+
+  function onBarline() {
+    const barIndexInLine = currentLine.bars.length;
+    commitBar();
+    if (rBarIndex !== null && barIndexInLine === rBarIndex + 1) {
+      const prev2 = completedBars.length >= 4 ? completedBars[completedBars.length - 4] : [];
+      const prev1 = completedBars.length >= 3 ? completedBars[completedBars.length - 3] : [];
+      currentLine.bars[rBarIndex]     = prev2.join(' ');
+      currentLine.bars[rBarIndex + 1] = prev1.join(' ');
+      completedBars[completedBars.length - 2] = [...prev2];
+      completedBars[completedBars.length - 1] = [...prev1];
+      rBarIndex = null;
+    }
+    if (cellCount >= 16) {
+      currentSection.lines.push(currentLine);
+      currentLine = { bars: [] };
+      rBarIndex = null;
+      cellCount = 0;
+    }
+  }
+
+  function startNewSection(name) {
+    if (currentBarChords.length > 0 || currentBarNth !== null) commitBar();
+    if (currentLine.bars.length > 0) {
+      currentSection.lines.push(currentLine);
+      currentLine = { bars: [] };
+      cellCount = 0;
+      rBarIndex = null;
+    }
+    if (currentSection.lines.length > 0 || currentSection.name) sections.push(currentSection);
+    currentSection = { name, lines: [] };
+  }
+
+  let i = 0;
+  const len = block.length;
+
+  while (i < len) {
+    if (block[i] === '\t' || block[i] === '\n' || block[i] === '\r') { i++; continue; }
+
+    if (block[i] === '*' && i + 1 < len) {
+      const mark = block[i + 1];
+      if (rehearsalMap[mark]) { startNewSection(rehearsalMap[mark]); i += 2; continue; }
+      ignored.push({ bar: completedBars.length + 1, token: '*' + block[i + 1] });
+      i += 2; continue;
+    }
+
+    if (block[i] === '<') {
+      const end = block.indexOf('>', i);
+      const text = end !== -1 ? block.slice(i + 1, end) : block.slice(i + 1);
+      ignored.push({ bar: completedBars.length + 1, token: `<${text}>` });
+      i = end !== -1 ? end + 1 : len; continue;
+    }
+
+    if (block[i] === 'T' && i + 1 < len && /\d/.test(block[i + 1])) {
+      let j = i + 1;
+      while (j < len && /\d/.test(block[j])) j++;
+      if (!timeSigSeen) {
+        const raw = block.slice(i + 1, j);
+        const tsMap = { '44':'4/4','34':'3/4','54':'5/4','64':'6/4','74':'7/4',
+          '22':'2/2','32':'3/2','58':'5/8','68':'6/8','78':'7/8','98':'9/8','12':'12/8' };
+        const ts = tsMap[raw] || '';
+        timeSig = ts === '4/4' ? '' : ts;
+        timeSigSeen = true;
+      }
+      i = j; continue;
+    }
+
+    if (block[i] === 'N' && i + 1 < len && /[1-3]/.test(block[i + 1])) {
+      currentBarNth = parseInt(block[i + 1]); i += 2; continue;
+    }
+    if (block[i] === 'N' && i + 1 < len && block[i + 1] === '0') {
+      ignored.push({ bar: completedBars.length + 1, token: 'N0' }); i += 2; continue;
+    }
+
+    if (/[sl]/.test(block[i]) && i + 1 < len && /[A-GWn[]/.test(block[i + 1])) {
+      i++; continue;
+    }
+
+    if (block[i] === 'S') {
+      ignored.push({ bar: completedBars.length + 1, token: 'S (segno)' }); i++; continue;
+    }
+
+    if (block[i] === 'f') {
+      ignored.push({ bar: completedBars.length + 1, token: 'f (fermata)' }); i++; continue;
+    }
+
+    if (block[i] === 'Q') { startNewSection('Coda'); i++; continue; }
+
+    if (block[i] === 'L') { i++; continue; }
+
+    if (block[i] === 'r') {
+      rBarIndex = currentLine.bars.length;
+      countCell();
+      i++; continue;
+    }
+
+    if (block[i] === 'x') { countCell(); i++; continue; }
+
+    if (block[i] === 'p') { countCell(); i++; continue; }
+
+    if (block[i] === 'n') {
+      currentBarChords.push('NC'); countCell(); i++; continue;
+    }
+
+    if (block[i] === 'W') { i++; continue; }
+
+    if (block[i] === '(') {
+      const end = block.indexOf(')', i);
+      const inner = end !== -1 ? block.slice(i + 1, end) : '';
+      ignored.push({ bar: completedBars.length + 1, token: `Alternate chord: ${inner}` });
+      i = end !== -1 ? end + 1 : len; continue;
+    }
+
+    if ('[]{}|Z'.includes(block[i])) {
+      const bl = block[i];
+      const isFinalZ = bl === 'Z' && i === len - 1;
+      if (bl !== '[' && bl !== '{') {
+        onBarline();
+        if (isFinalZ && currentLine.bars.length > 0) {
+          currentSection.lines.push(currentLine);
+          currentLine = { bars: [] };
+          cellCount = 0;
+          rBarIndex = null;
+        }
+      }
+      i++; continue;
+    }
+
+    if (block[i] === ' ') { countCell(); i++; continue; }
+
+    if (block[i] === ',') { i++; continue; }
+
+    if (/[A-G]/.test(block[i])) {
+      let j = i + 1;
+      while (j < len && /[+\-\^dhob#suadlt\d]/.test(block[j])) j++;
+      if (j < len && block[j] === '/') {
+        j++;
+        if (j < len && /[A-G]/.test(block[j])) j++;
+        if (j < len && /[#b]/.test(block[j])) j++;
+      }
+      let chord = block.slice(i, j);
+      chord = chord.replace(/\^/g, 'maj').replace(/o7/g, 'dim7').replace(/h7/g, 'm7b5').replace(/-/g, 'm');
+      currentBarChords.push(chord);
+      countCell();
+      i = j; continue;
+    }
+
+    if (block[i] === '/') {
+      let j = i + 1;
+      if (j < len && /[A-G]/.test(block[j])) j++;
+      if (j < len && /[#b]/.test(block[j])) j++;
+      currentBarChords.push(block.slice(i, j));
+      countCell();
+      i = j; continue;
+    }
+
+    ignored.push({ bar: completedBars.length + 1, token: JSON.stringify(block[i]) });
+    i++;
+  }
+
+  if (currentBarChords.length > 0) commitBar();
+  if (currentLine.bars.length > 0) currentSection.lines.push(currentLine);
+  if (currentSection.lines.length > 0 || currentSection.name) sections.push(currentSection);
+
+  if (ignored.length > 0) {
+    console.log('iReal import — ignored tokens:\n' +
+      ignored.map(ig => `  - Bar ${ig.bar}: ${ig.token}`).join('\n'));
+  }
+
+  return { timeSig, sections };
+}
+
+function performIRealImport() {
+  let url = document.getElementById('ireal-import-textarea').value.trim();
+  if (!url) return;
+
+  try { url = decodeURIComponent(url.replace(/\+/g, ' ')); } catch(e) {}
+
+  const isObfuscated = url.startsWith('irealb://');
+  const isPlain      = url.startsWith('irealbook://');
+  if (!isObfuscated && !isPlain) { showToast('Not a valid iReal URL'); return; }
+
+  const body = url.slice(isObfuscated ? 9 : 12).split('===')[0];
+  const { title, composer, style, key, blockRaw } = extractIRealFields(body);
+
+  let block = blockRaw;
+  if (isObfuscated) block = deobfuscateIReal(block);
+
+  const parsed = parseIRealBlock(block);
+
+  const cparts = composer.trim().split(/\s+/);
+  const composerOut = cparts.length >= 2 ? cparts.slice(1).join(' ') + ' ' + cparts[0] : composer;
+
+  // Format key: iReal uses 'F' for major, 'F-' for minor
+  const keyOut = key.endsWith('-')
+    ? key.slice(0, -1) + ' minor'
+    : key ? key + ' major' : key;
+
+  document.getElementById('m-title').value     = title;
+  document.getElementById('m-composer').value  = composerOut;
+  document.getElementById('m-feel').value      = style;
+  document.getElementById('m-key').value       = keyOut;
+  document.getElementById('m-timesig').value   = parsed.timeSig;
+  document.getElementById('m-structure').value = '';
+
+  lines = [];
+  for (const sec of parsed.sections) {
+    let isFirst = true;
+    for (const line of sec.lines) {
+      lines.push({ title: isFirst ? sec.name : '', bars: line.bars.length > 0 ? line.bars : [''] });
+      isFirst = false;
+    }
+  }
+  if (lines.length === 0) lines = [{ title: '', bars: [''] }];
+
+  document.getElementById('ireal-import-backdrop').classList.remove('active');
+  render();
+  scheduleOutput();
+  showToast('Imported from iReal Pro');
+}
+
 function hasExistingData() {
   const title     = document.getElementById('m-title').value.trim();
   const composer  = document.getElementById('m-composer').value.trim();
@@ -2939,6 +3266,7 @@ document.getElementById('menu-btn').addEventListener('click', e => {
 
   const items = [
     ['Import from plain text', () => { closeMenu(); openImportModal(); }],
+    ['Import from iReal Pro',  () => { closeMenu(); openIRealImportModal(); }],
     ['Export to iReal Pro',    () => { closeMenu(); exportIReal(); }],
     ['Settings',               () => { closeMenu(); openSettings(); }],
   ];
@@ -2952,6 +3280,16 @@ document.getElementById('menu-btn').addEventListener('click', e => {
   document.getElementById('menu-portal').appendChild(m);
   menuState = m;
 });
+document.getElementById('ireal-import-cancel-btn').addEventListener('click', () => {
+  document.getElementById('ireal-import-backdrop').classList.remove('active');
+});
+document.getElementById('ireal-import-submit-btn').addEventListener('click', performIRealImport);
+document.getElementById('ireal-import-backdrop').addEventListener('click', e => {
+  if (e.target === document.getElementById('ireal-import-backdrop')) {
+    document.getElementById('ireal-import-backdrop').classList.remove('active');
+  }
+});
+
 document.getElementById('import-cancel-btn').addEventListener('click', closeImportModal);
 document.getElementById('import-submit-btn').addEventListener('click', performImport);
 
